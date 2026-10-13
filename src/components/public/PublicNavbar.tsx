@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRouter } from '../../router/RouterContext';
-import { BookOpen, ShieldCheck, ArrowRight, Menu, X } from 'lucide-react';
+import { ShieldCheck, ArrowRight, Menu, X } from 'lucide-react';
+import { Logo } from '../common/Logo';
 
 export const PublicNavbar: React.FC = () => {
   const { navigate, currentPath } = useRouter();
@@ -14,18 +15,9 @@ export const PublicNavbar: React.FC = () => {
         {/* Logo & Brand */}
         <div 
           onClick={() => navigate('/')} 
-          className="flex items-center space-x-3 cursor-pointer group"
+          className="cursor-pointer group hover:opacity-95 transition-opacity"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-900/40 group-hover:scale-105 transition-transform">
-            <BookOpen className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="font-black text-lg tracking-tight flex items-center space-x-1.5">
-              <span>MBT Library</span>
-              <span className="text-[10px] uppercase font-bold bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/30">SaaS</span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-medium">Multi-Tenant Library System</p>
-          </div>
+          <Logo size={42} showText={true} />
         </div>
 
         {/* Desktop Nav Links */}

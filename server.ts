@@ -358,7 +358,7 @@ app.post('/api/tenants/provision', async (req, res) => {
         role: 'library_admin',
         joinedAt: new Date(),
         isActive: true,
-      }).onConflictDoNothing();
+      }).onConflictDoNothing({ target: tenantMemberships.id });
 
       // 5. Insert Subscription
       await tx.insert(subscriptions).values({
@@ -561,7 +561,7 @@ app.post('/api/tenants/:slug/loans/issue', async (req, res) => {
           settings: initTenant.settings,
           createdAt: new Date(initTenant.createdAt),
           updatedAt: new Date(initTenant.updatedAt),
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: tenants.id });
         tRows = await db.select().from(tenants).where(eq(tenants.slug, slug)).limit(1);
       }
     }
@@ -643,7 +643,7 @@ app.post('/api/tenants/:slug/loans/issue', async (req, res) => {
           copiesTotal: seedBook.copiesTotal || 5,
           copiesAvailable: seedBook.copiesAvailable || 5,
           createdAt: new Date(),
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: books.id });
 
         bRows = await db.select().from(books).where(and(eq(books.id, newBookId), eq(books.tenantId, tenant.id))).limit(1);
       }
@@ -692,7 +692,7 @@ app.post('/api/tenants/:slug/loans/issue', async (req, res) => {
           isSuperAdmin: false,
           isActive: true,
           createdAt: new Date(),
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: users.id });
 
         await db.insert(tenantMemberships).values({
           id: `mem_${tenant.id}_${initUser.id}`,
@@ -701,7 +701,7 @@ app.post('/api/tenants/:slug/loans/issue', async (req, res) => {
           role: 'student',
           joinedAt: new Date(),
           isActive: true,
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: tenantMemberships.id });
 
         uRows = await db
           .select({
@@ -1516,7 +1516,7 @@ app.post('/api/invitations/:token/accept', async (req, res) => {
         role: invitation.role,
         joinedAt: new Date(),
         isActive: true,
-      }).onConflictDoNothing();
+      }).onConflictDoNothing({ target: tenantMemberships.id });
     }
 
     // 4. Log activity
@@ -1729,7 +1729,7 @@ app.post('/api/tenants/:slug/members', async (req, res) => {
       role,
       joinedAt: new Date(),
       isActive: true,
-    }).onConflictDoNothing();
+    }).onConflictDoNothing({ target: tenantMemberships.id });
 
     res.json({ success: true, userId, membershipId: memId });
   } catch (err: any) {
@@ -1796,7 +1796,7 @@ async function seedDatabaseIfEmpty() {
           isPopular: p.isPopular || false,
           isActive: p.isActive,
           createdAt: new Date(p.createdAt),
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: subscriptionPlans.id });
       }
     }
 
@@ -1816,7 +1816,7 @@ async function seedDatabaseIfEmpty() {
           settings: t.settings,
           createdAt: new Date(t.createdAt),
           updatedAt: new Date(t.updatedAt),
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: tenants.id });
       }
     }
 
@@ -1840,7 +1840,7 @@ async function seedDatabaseIfEmpty() {
           customMaxStudents: s.customLimits?.maxStudents,
           customMaxStorageMb: s.customLimits?.storageMb,
           customOverrideReason: s.customOverrideReason,
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: subscriptions.id });
       }
     }
 
@@ -1859,7 +1859,7 @@ async function seedDatabaseIfEmpty() {
           isSuperAdmin: u.isSuperAdmin,
           isActive: u.isActive,
           createdAt: new Date(u.createdAt),
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: users.id });
       }
       for (const m of INITIAL_MEMBERSHIPS) {
         await db.insert(tenantMemberships).values({
@@ -1869,7 +1869,7 @@ async function seedDatabaseIfEmpty() {
           role: m.role,
           joinedAt: new Date(m.joinedAt),
           isActive: m.isActive,
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: tenantMemberships.id });
       }
     }
 
@@ -1893,7 +1893,7 @@ async function seedDatabaseIfEmpty() {
           copiesTotal: b.copiesTotal,
           copiesAvailable: b.copiesAvailable,
           createdAt: new Date(b.createdAt),
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: books.id });
       }
       for (const c of INITIAL_COPIES) {
         await db.insert(bookCopies).values({
@@ -1906,7 +1906,7 @@ async function seedDatabaseIfEmpty() {
           condition: c.condition,
           shelfLocation: c.shelfLocation,
           addedAt: new Date(c.addedAt),
-        }).onConflictDoNothing();
+        }).onConflictDoNothing({ target: bookCopies.id });
       }
     }
   } catch (err: any) {

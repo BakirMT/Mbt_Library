@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, Building2 } from 'lucide-react';
 import { useRouter } from '../../router/RouterContext';
+import { Logo } from '../common/Logo';
 
 export const SuperAdminLogin: React.FC = () => {
   const { loginSuperAdmin, navigate } = useRouter();
@@ -23,19 +24,8 @@ export const SuperAdminLogin: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans text-slate-200">
       <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-8 max-w-md w-full shadow-2xl backdrop-blur-md">
-        <div className="text-center space-y-2 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xl mx-auto shadow-lg shadow-blue-900/40">
-            M
-          </div>
-          <div className="flex items-center justify-center space-x-1.5">
-            <span className="font-extrabold text-white text-lg tracking-tight">MBT LIBRARY</span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              LEVEL 1
-            </span>
-          </div>
-          <p className="text-xs text-slate-400">
-            Platform Owner & Central SaaS Administration Portal
-          </p>
+        <div className="flex flex-col items-center justify-center space-y-3 mb-6">
+          <Logo size={56} showText={true} subtext="Platform Owner & SaaS Administration" />
         </div>
 
         {error && (

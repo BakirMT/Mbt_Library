@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from '../../router/RouterContext';
 import { saasStorage } from '../../services/storage';
+import { Logo } from '../common/Logo';
 
 interface SuperAdminLayoutProps {
   children: React.ReactNode;
@@ -139,21 +140,8 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
         }`}
       >
         {/* Brand Header */}
-        <div className="p-5 border-b border-slate-800/80">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white text-lg shadow-md shadow-blue-900/30">
-              M
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center space-x-1.5">
-                <span className="font-extrabold text-base tracking-tight text-white">MBT LIBRARY</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                  SAAS
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 font-medium truncate">Level 1: Platform Owner</p>
-            </div>
-          </div>
+        <div className="p-4 border-b border-slate-800/80">
+          <Logo size={38} showText={true} subtext="Level 1: Platform Owner" />
 
           {/* Quick System Badge */}
           <div className="mt-4 px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-700/60 flex items-center justify-between text-xs">
