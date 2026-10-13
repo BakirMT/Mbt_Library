@@ -1942,11 +1942,23 @@ async function startServer() {
     });
   }
 
-  app.listen(port, () => {
-    console.log(`[MBT Library Full-Stack] Server running on port ${port}`);
-    console.log(`[License Engine] 72-Hour Free trial background deactivation scheduler active`);
-    console.log(`[Cloud SQL] Relational schema and Row Level Security active`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(port, () => {
+      console.log(`[MBT Library Full-Stack] Server running on port ${port}`);
+      console.log(`[License Engine] 72-Hour Free trial background deactivation scheduler active`);
+      console.log(`[Cloud SQL] Relational schema and Row Level Security active`);
+    });
+  }
 }
 
-startServer();
+if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+  app.use(express.static(path.resolve(__dirname, "dist")));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.resolve(__dirname, "dist", "index.html"));
+  });
+  seedDatabaseIfEmpty().catch(console.error);
+} else {
+  startServer();
+}
+
+export default app;
