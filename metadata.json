@@ -1,0 +1,6 @@
+{
+  "name": "MBT Library SaaS Platform",
+  "description": "Multi-tenant SaaS library management platform for schools, colleges, universities, Islamic institutions, and public libraries with centralized administration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
