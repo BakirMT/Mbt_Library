@@ -482,6 +482,62 @@ class SaasStorageService {
     return getFromStorage<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
   }
 
+  getSuperAdminUser(): User {
+    const users = this.getUsers();
+    let superUser = users.find((u) => u.isSuperAdmin || u.email.toLowerCase() === 'mbtofficial26@gmail.com');
+    if (!superUser) {
+      superUser = {
+        id: 'usr_super_admin_01',
+        email: 'mbtofficial26@gmail.com',
+        fullName: 'MBT Super Admin',
+        phone: '+91 8943182858',
+        avatarUrl: '',
+        isSuperAdmin: true,
+        isActive: true,
+        createdAt: '2024-11-01T00:00:00Z',
+        lastLoginAt: new Date().toISOString(),
+      };
+      users.push(superUser);
+      saveToStorage(STORAGE_KEYS.USERS, users);
+    } else if (!superUser.isSuperAdmin) {
+      superUser.isSuperAdmin = true;
+      saveToStorage(STORAGE_KEYS.USERS, users);
+    }
+    return superUser;
+  }
+
+  authenticateSuperAdmin(email: string): User | null {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const users = this.getUsers();
+    let admin = users.find((u) => (u.isSuperAdmin || u.email.toLowerCase() === 'mbtofficial26@gmail.com') && u.email.toLowerCase() === cleanEmail);
+    if (!admin && cleanEmail === 'mbtofficial26@gmail.com') {
+      admin = users.find((u) => u.email.toLowerCase() === cleanEmail);
+      if (admin) {
+        admin.isSuperAdmin = true;
+      } else {
+        admin = {
+          id: 'usr_super_admin_01',
+          email: 'mbtofficial26@gmail.com',
+          fullName: 'MBT Super Admin',
+          phone: '+91 8943182858',
+          avatarUrl: '',
+          isSuperAdmin: true,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+        };
+        users.push(admin);
+      }
+      saveToStorage(STORAGE_KEYS.USERS, users);
+    }
+    if (admin) {
+      admin.isSuperAdmin = true;
+      saveToStorage(STORAGE_KEYS.USERS, users);
+      return admin;
+    }
+    return null;
+  }
+
   getMemberships(): TenantMembership[] {
     return getFromStorage<TenantMembership[]>(STORAGE_KEYS.MEMBERSHIPS, INITIAL_MEMBERSHIPS);
   }

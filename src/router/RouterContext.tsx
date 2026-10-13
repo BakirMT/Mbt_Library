@@ -159,13 +159,12 @@ export const RouterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Super Admin session
   const [superAdminUser, setSuperAdminUser] = useState<User | null>(() => {
+    const superUser = saasStorage.getSuperAdminUser();
     const saved = localStorage.getItem('mbt_super_admin_authenticated');
     if (saved === 'true') {
-      const users = saasStorage.getUsers();
-      return users.find((u) => u.isSuperAdmin) || null;
+      return superUser;
     }
-    const superUser = saasStorage.getUsers().find((u) => u.isSuperAdmin);
-    return superUser || null;
+    return superUser;
   });
 
   useEffect(() => {
@@ -185,8 +184,7 @@ export const RouterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const loginSuperAdmin = useCallback((email: string): boolean => {
-    const users = saasStorage.getUsers();
-    const admin = users.find((u) => u.isSuperAdmin && u.email.toLowerCase() === email.toLowerCase());
+    const admin = saasStorage.authenticateSuperAdmin(email);
     if (admin) {
       setSuperAdminUser(admin);
       localStorage.setItem('mbt_super_admin_authenticated', 'true');
