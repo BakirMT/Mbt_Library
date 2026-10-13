@@ -327,7 +327,7 @@ const ProvisionLibraryModalContent: React.FC<ProvisionLibraryModalContentProps> 
 
         {/* Step Progress Tracker (Steps 1 to 4) */}
         {step < 5 && (
-          <div className="bg-slate-50 border-b border-slate-200 px-6 py-3">
+          <div className="bg-slate-50 border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3">
             <div className="flex items-center justify-between max-w-lg mx-auto text-xs">
               {[
                 { s: 1, label: 'Details', icon: Building2 },
@@ -335,25 +335,24 @@ const ProvisionLibraryModalContent: React.FC<ProvisionLibraryModalContentProps> 
                 { s: 3, label: 'Subscription', icon: CreditCard },
                 { s: 4, label: 'Review', icon: CheckCircle2 },
               ].map((item, idx) => {
-                const Icon = item.icon;
                 const isPassed = step > item.s;
                 const isCurrent = step === item.s;
                 return (
                   <React.Fragment key={item.s}>
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1.5 shrink-0">
                       <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-colors ${
+                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-colors shrink-0 ${
                           isPassed
                             ? 'bg-emerald-600 text-white'
                             : isCurrent
-                            ? 'bg-blue-600 text-white'
+                            ? 'bg-blue-600 text-white ring-2 ring-blue-600/20'
                             : 'bg-slate-200 text-slate-500'
                         }`}
                       >
                         {isPassed ? <Check className="w-3.5 h-3.5" /> : item.s}
                       </div>
                       <span
-                        className={`font-semibold ${
+                        className={`font-semibold hidden sm:inline ${
                           isCurrent
                             ? 'text-blue-700'
                             : isPassed
@@ -366,7 +365,7 @@ const ProvisionLibraryModalContent: React.FC<ProvisionLibraryModalContentProps> 
                     </div>
                     {idx < 3 && (
                       <div
-                        className={`h-0.5 flex-1 mx-2 ${
+                        className={`h-0.5 flex-1 mx-1.5 sm:mx-2 min-w-[12px] ${
                           step > idx + 1 ? 'bg-emerald-600' : 'bg-slate-200'
                         }`}
                       />
@@ -374,6 +373,10 @@ const ProvisionLibraryModalContent: React.FC<ProvisionLibraryModalContentProps> 
                   </React.Fragment>
                 );
               })}
+            </div>
+            {/* Mobile current step indicator text */}
+            <div className="sm:hidden text-center text-[11px] font-semibold text-blue-700 mt-1">
+              Step {step} of 4: {step === 1 ? 'Library Details' : step === 2 ? 'Admin User' : step === 3 ? 'Subscription' : 'Review & Confirm'}
             </div>
           </div>
         )}
@@ -1118,14 +1121,14 @@ Admin Invitation Link: ${adminInvitationUrl}`;
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+        <div className="bg-slate-50 px-4 sm:px-6 py-3.5 sm:py-4 border-t border-slate-200 flex items-center justify-between gap-2">
           {step < 5 ? (
             <>
               <button
                 type="button"
                 onClick={handleBack}
                 disabled={step === 1 || isSubmitting}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-30 flex items-center space-x-1 cursor-pointer"
+                className="px-3.5 sm:px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-30 flex items-center space-x-1 cursor-pointer shrink-0"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back</span>
@@ -1135,7 +1138,7 @@ Admin Invitation Link: ${adminInvitationUrl}`;
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-lg hover:bg-slate-200/60 cursor-pointer"
+                  className="px-3 sm:px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-lg hover:bg-slate-200/60 cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1144,7 +1147,7 @@ Admin Invitation Link: ${adminInvitationUrl}`;
                   <button
                     type="button"
                     onClick={handleNext}
-                    className="px-5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs flex items-center space-x-1 cursor-pointer"
+                    className="px-4 sm:px-5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs flex items-center space-x-1 cursor-pointer"
                   >
                     <span>Next</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -1154,24 +1157,25 @@ Admin Invitation Link: ${adminInvitationUrl}`;
                     type="button"
                     onClick={handleExecuteProvisioning}
                     disabled={isSubmitting}
-                    className="px-6 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm flex items-center space-x-2 cursor-pointer disabled:opacity-75"
+                    className="px-4 sm:px-6 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm flex items-center space-x-1.5 sm:space-x-2 cursor-pointer disabled:opacity-75"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{isSubmitting ? 'Provisioning Library...' : 'Provision Library'}</span>
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    <span>{isSubmitting ? 'Provisioning...' : 'Provision Library'}</span>
                   </button>
                 )}
               </div>
             </>
           ) : (
-            <div className="w-full flex items-center justify-between">
+            <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
               <button
+                type="button"
                 onClick={() => {
                   onClose();
                   if (provisionResult) {
                     navigate(`/l/${provisionResult.tenant.slug}`);
                   }
                 }}
-                className="px-4 py-2 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-300 rounded-lg bg-blue-50/50 flex items-center space-x-1 cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-300 rounded-lg bg-blue-50/50 flex items-center justify-center space-x-1 cursor-pointer"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Visit Library Landing Page</span>
@@ -1180,7 +1184,7 @@ Admin Invitation Link: ${adminInvitationUrl}`;
               <button
                 type="button"
                 onClick={onClose}
-                className="px-6 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg cursor-pointer"
+                className="px-6 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg cursor-pointer text-center"
               >
                 Done
               </button>

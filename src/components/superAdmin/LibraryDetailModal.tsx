@@ -18,6 +18,9 @@ import {
   Edit,
   Save,
   CheckCircle2,
+  Clock,
+  Play,
+  Pause,
 } from 'lucide-react';
 import { Tenant, Subscription, SubscriptionPlan, User } from '../../types/saas';
 import { saasStorage } from '../../services/storage';
@@ -119,13 +122,58 @@ const LibraryDetailModalContent: React.FC<LibraryDetailModalContentProps> = ({
     onUpdate();
   };
 
+  const [adminResetError, setAdminResetError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  const handleExtendTrial = () => {
+    try {
+      const res = saasStorage.extendTrial(tenant.id, 72, 'Super Admin manual 72-hour extension via Library Detail Modal');
+      if (res.success) {
+        setActionSuccess('3-day Free trial extended by 72 hours. Library access restored to Trial!');
+        setTimeout(() => setActionSuccess(null), 4000);
+        onUpdate();
+      }
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
+  const handleQuickReactivate = (planId: string = 'plan_standard') => {
+    try {
+      saasStorage.updateSubscription(tenant.id, {
+        planId,
+        status: 'active',
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      saasStorage.updateTenantStatus(tenant.id, 'active', `Reactivated with ${planId} plan`);
+      setActionSuccess('Library successfully reactivated with authorised active subscription!');
+      setTimeout(() => setActionSuccess(null), 4000);
+      onUpdate();
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleSuspension = () => {
+    try {
+      const newStatus = tenant.status === 'suspended' ? 'active' : 'suspended';
+      saasStorage.updateTenantStatus(tenant.id, newStatus, `Super Admin manual ${newStatus} action`);
+      setActionSuccess(`Library status updated to ${newStatus}.`);
+      setTimeout(() => setActionSuccess(null), 4000);
+      onUpdate();
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
   const handleExecuteResetAdmin = () => {
     if (!libraryAdmin) return;
+    setAdminResetError(null);
     try {
       const result = saasStorage.resetLibraryAdminAccount(tenant.id, libraryAdmin.id);
       setGeneratedResetLink(result.resetLink);
     } catch (e: any) {
-      alert(e.message || 'Failed to reset admin account');
+      setAdminResetError(e.message || 'Failed to reset admin account');
     }
   };
 
@@ -138,19 +186,19 @@ const LibraryDetailModalContent: React.FC<LibraryDetailModalContentProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[88vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden my-4 sm:my-8 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-base shadow-xs">
+        <div className="bg-slate-900 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between border-b border-slate-800 gap-3">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-base shadow-xs shrink-0">
               {tenant.logoInitials}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-2">
-                <h2 className="text-base font-bold tracking-tight">{tenant.name}</h2>
+                <h2 className="text-base font-bold tracking-tight truncate">{tenant.name}</h2>
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
                     tenant.status === 'active'
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       : tenant.status === 'trial'
@@ -161,19 +209,20 @@ const LibraryDetailModalContent: React.FC<LibraryDetailModalContentProps> = ({
                   {tenant.status}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">/l/{tenant.slug}</p>
+              <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">/l/{tenant.slug}</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-slate-100 border-b border-slate-200 px-6 flex items-center space-x-1 text-xs">
+        <div className="bg-slate-100 border-b border-slate-200 px-3 sm:px-6 flex items-center space-x-1 text-xs overflow-x-auto scrollbar-thin">
           {[
             { id: 'overview', label: 'Overview & Details', icon: Building2 },
             { id: 'subscription', label: 'Subscription & Limits', icon: CreditCard },
@@ -186,14 +235,15 @@ const LibraryDetailModalContent: React.FC<LibraryDetailModalContentProps> = ({
             return (
               <button
                 key={t.id}
+                type="button"
                 onClick={() => setActiveTab(t.id as any)}
-                className={`py-3 px-3.5 font-semibold flex items-center space-x-2 border-b-2 transition-colors cursor-pointer ${
+                className={`py-3 px-3 sm:px-3.5 font-semibold flex items-center space-x-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   isSel
                     ? 'border-blue-600 text-blue-700 bg-white'
                     : 'border-transparent text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-3.5 h-3.5 shrink-0" />
                 <span>{t.label}</span>
               </button>
             );
@@ -201,7 +251,7 @@ const LibraryDetailModalContent: React.FC<LibraryDetailModalContentProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
@@ -429,6 +479,101 @@ const LibraryDetailModalContent: React.FC<LibraryDetailModalContentProps> = ({
                 )}
               </div>
 
+              {actionSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold flex items-center space-x-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{actionSuccess}</span>
+                </div>
+              )}
+
+              {/* Requirement 5: Free Trial Expiration & Authority Control Card */}
+              {(currentPlan?.code === 'free' || subscription?.status === 'trial' || subscription?.status === 'expired' || tenant.status === 'deactivated') && (
+                <div className={`p-4 rounded-2xl border text-xs space-y-3 ${
+                  tenant.status === 'deactivated' || subscription?.status === 'expired'
+                    ? 'bg-rose-50/80 border-rose-200 text-rose-900'
+                    : 'bg-amber-50/80 border-amber-200 text-amber-900'
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-black/5 pb-2.5">
+                    <div className="flex items-center space-x-2">
+                      <AlertTriangle className={`w-4 h-4 shrink-0 ${
+                        tenant.status === 'deactivated' || subscription?.status === 'expired' ? 'text-rose-600' : 'text-amber-600'
+                      }`} />
+                      <span className="font-bold text-xs">
+                        {tenant.status === 'deactivated' || subscription?.status === 'expired'
+                          ? '3-Day Free Trial Expired — Access Deactivated'
+                          : 'Strict 3-Day (72 Hours) Free Trial Active'}
+                      </span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase shrink-0 ${
+                      tenant.status === 'deactivated' || subscription?.status === 'expired'
+                        ? 'bg-rose-200 text-rose-800 border border-rose-300'
+                        : 'bg-amber-200 text-amber-800 border border-amber-300'
+                    }`}>
+                      Tenant Status: {tenant.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                    <div>
+                      <span className="text-slate-500 block">Trial Activation Timestamp:</span>
+                      <strong className="text-slate-900 font-mono">
+                        {subscription?.startDate
+                          ? new Date(subscription.startDate).toLocaleString('en-IN', { timeZoneName: 'short' })
+                          : new Date(tenant.createdAt).toLocaleString('en-IN', { timeZoneName: 'short' })}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Trial Expiry Timestamp (72 Hours):</span>
+                      <strong className={`font-mono ${
+                        tenant.status === 'deactivated' || subscription?.status === 'expired' ? 'text-rose-700' : 'text-slate-900'
+                      }`}>
+                        {subscription?.expiryDate
+                          ? new Date(subscription.expiryDate).toLocaleString('en-IN', { timeZoneName: 'short' })
+                          : 'N/A'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Super Admin Quick Actions */}
+                  <div className="pt-2 border-t border-black/5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleExtendTrial}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs transition-colors"
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>Extend Free Trial (+72h / 3 Days)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleQuickReactivate('plan_standard')}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs transition-colors"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Reactivate (Assign Standard Plan)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleQuickReactivate('plan_basic')}
+                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs transition-colors"
+                    >
+                      <span>Assign Basic Plan</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleSuspension}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs transition-colors"
+                    >
+                      <Pause className="w-3.5 h-3.5" />
+                      <span>{tenant.status === 'suspended' ? 'Unsuspend Library' : 'Suspend Library'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {!isEditingSub ? (
                 <div className="space-y-4">
                   <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 flex items-center justify-between">
@@ -445,13 +590,15 @@ const LibraryDetailModalContent: React.FC<LibraryDetailModalContentProps> = ({
                         Expiry:{' '}
                         <strong>
                           {subscription?.expiryDate
-                            ? new Date(subscription.expiryDate).toLocaleDateString()
+                            ? new Date(subscription.expiryDate).toLocaleString('en-IN')
                             : 'N/A'}
                         </strong>
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-600 text-white">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold text-white ${
+                        subscription?.status === 'expired' ? 'bg-rose-600' : 'bg-blue-600'
+                      }`}>
                         {subscription?.status?.toUpperCase()}
                       </span>
                       <p className="text-[11px] text-slate-500 mt-1">
@@ -630,8 +777,15 @@ const LibraryDetailModalContent: React.FC<LibraryDetailModalContentProps> = ({
                     reset token. The Library Admin can use this link to set fresh credentials.
                   </p>
 
+                  {adminResetError && (
+                    <div className="p-2 rounded bg-rose-100 text-rose-800 text-[11px] font-semibold border border-rose-200">
+                      {adminResetError}
+                    </div>
+                  )}
+
                   {!generatedResetLink ? (
                     <button
+                      type="button"
                       onClick={handleExecuteResetAdmin}
                       className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg cursor-pointer"
                     >

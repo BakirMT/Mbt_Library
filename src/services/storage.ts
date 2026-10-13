@@ -38,9 +38,9 @@ import {
 } from './mockData';
 
 const STORAGE_KEYS = {
-  TENANTS: 'mbt_saas_tenants_v1',
-  PLANS: 'mbt_saas_plans_v1',
-  SUBSCRIPTIONS: 'mbt_saas_subscriptions_v1',
+  TENANTS: 'mbt_saas_tenants_v2',
+  PLANS: 'mbt_saas_plans_v2',
+  SUBSCRIPTIONS: 'mbt_saas_subscriptions_v2',
   USERS: 'mbt_saas_users_v1',
   MEMBERSHIPS: 'mbt_saas_memberships_v1',
   INVITATIONS: 'mbt_saas_invitations_v1',
@@ -156,6 +156,7 @@ class SaasStorageService {
 
   // --- TENANTS ---
   getTenants(): Tenant[] {
+    this.checkAndEnforceTrialExpirations();
     return getFromStorage<Tenant[]>(STORAGE_KEYS.TENANTS, INITIAL_TENANTS);
   }
 
@@ -269,6 +270,57 @@ class SaasStorageService {
     return true;
   }
 
+  // --- AUTOMATIC 3-DAY TRIAL EXPIRATION ENFORCEMENT ---
+  checkAndEnforceTrialExpirations(): { expiredCount: number } {
+    const now = Date.now();
+    const subs = getFromStorage<Subscription[]>(STORAGE_KEYS.SUBSCRIPTIONS, INITIAL_SUBSCRIPTIONS);
+    const tenants = getFromStorage<Tenant[]>(STORAGE_KEYS.TENANTS, INITIAL_TENANTS);
+    const plans = this.getPlans();
+
+    let updated = false;
+    let count = 0;
+
+    subs.forEach((sub, sIdx) => {
+      const plan = plans.find((p) => p.id === sub.planId);
+      const isTrialOrFree = plan?.code === 'free' || sub.status === 'trial';
+      const expiryTime = new Date(sub.expiryDate).getTime();
+
+      // If trial has expired (passed 72 hours) and status is not yet marked expired
+      if (isTrialOrFree && now >= expiryTime && sub.status !== 'expired') {
+        subs[sIdx].status = 'expired';
+        updated = true;
+        count++;
+
+        const tIdx = tenants.findIndex((t) => t.id === sub.tenantId);
+        if (tIdx !== -1) {
+          // Rule 7: Do not overwrite if separately suspended or archived
+          if (tenants[tIdx].status !== 'suspended' && tenants[tIdx].status !== 'archived') {
+            tenants[tIdx].status = 'deactivated';
+            tenants[tIdx].updatedAt = new Date().toISOString();
+          }
+        }
+
+        this.logActivity({
+          tenantId: sub.tenantId,
+          tenantName: tIdx !== -1 ? tenants[tIdx]?.name : undefined,
+          actorId: 'system',
+          actorName: 'MBT Automated License Engine',
+          actorRole: 'super_admin',
+          action: 'TRIAL_EXPIRED_DEACTIVATED',
+          category: 'subscription',
+          details: `3-day Free trial (72 hours) has expired for "${tIdx !== -1 ? tenants[tIdx]?.name : sub.tenantId}". Library access automatically deactivated. Super Admin notified.`,
+        });
+      }
+    });
+
+    if (updated) {
+      saveToStorage(STORAGE_KEYS.SUBSCRIPTIONS, subs);
+      saveToStorage(STORAGE_KEYS.TENANTS, tenants);
+    }
+
+    return { expiredCount: count };
+  }
+
   // --- SUBSCRIPTIONS ---
   getSubscriptions(): Subscription[] {
     return getFromStorage<Subscription[]>(STORAGE_KEYS.SUBSCRIPTIONS, INITIAL_SUBSCRIPTIONS);
@@ -293,16 +345,26 @@ class SaasStorageService {
     saveToStorage(STORAGE_KEYS.SUBSCRIPTIONS, subs);
 
     // If subscription status is updated, sync tenant status
-    if (updates.status) {
+    if (updates.status || updates.planId) {
       const tenants = this.getTenants();
       const tIdx = tenants.findIndex((t) => t.id === tenantId);
       if (tIdx !== -1) {
+        const currentTenantStatus = tenants[tIdx].status;
         if (updates.status === 'suspended') {
           tenants[tIdx].status = 'suspended';
         } else if (updates.status === 'trial') {
           tenants[tIdx].status = 'trial';
-        } else if (updates.status === 'active' && tenants[tIdx].status !== 'archived') {
-          tenants[tIdx].status = 'active';
+        } else if (updates.status === 'expired') {
+          if (currentTenantStatus !== 'suspended' && currentTenantStatus !== 'archived') {
+            tenants[tIdx].status = 'deactivated';
+          }
+        } else if (updates.status === 'active' || (updates.planId && updates.planId !== 'plan_free')) {
+          // Automatic reactivation upon upgrade:
+          // Rule 7: If the Super Admin has separately suspended a library, a subscription upgrade must not automatically override that suspension!
+          if (currentTenantStatus === 'deactivated' || currentTenantStatus === 'trial') {
+            tenants[tIdx].status = 'active';
+            tenants[tIdx].updatedAt = new Date().toISOString();
+          }
         }
         saveToStorage(STORAGE_KEYS.TENANTS, tenants);
       }
@@ -319,6 +381,49 @@ class SaasStorageService {
     });
 
     return subs[idx];
+  }
+
+  extendTrial(
+    tenantId: string,
+    hours = 72,
+    reason?: string
+  ): { success: boolean; expiryDate?: string; error?: string } {
+    const subs = this.getSubscriptions();
+    const sIdx = subs.findIndex((s) => s.tenantId === tenantId);
+    if (sIdx === -1) return { success: false, error: 'Subscription not found' };
+
+    const tenants = this.getTenants();
+    const tIdx = tenants.findIndex((t) => t.id === tenantId);
+
+    const now = Date.now();
+    const currentExpiry = new Date(subs[sIdx].expiryDate).getTime();
+    const baseTime = currentExpiry > now ? currentExpiry : now;
+    const newExpiry = new Date(baseTime + hours * 60 * 60 * 1000).toISOString();
+
+    subs[sIdx].status = 'trial';
+    subs[sIdx].expiryDate = newExpiry;
+    saveToStorage(STORAGE_KEYS.SUBSCRIPTIONS, subs);
+
+    if (tIdx !== -1) {
+      if (tenants[tIdx].status === 'deactivated' || tenants[tIdx].status === 'trial') {
+        tenants[tIdx].status = 'trial';
+        tenants[tIdx].updatedAt = new Date().toISOString();
+        saveToStorage(STORAGE_KEYS.TENANTS, tenants);
+      }
+    }
+
+    this.logActivity({
+      tenantId,
+      tenantName: tIdx !== -1 ? tenants[tIdx]?.name : undefined,
+      actorId: 'usr_super_admin_01',
+      actorName: 'Super Administrator',
+      actorRole: 'super_admin',
+      action: 'TRIAL_EXTENDED',
+      category: 'subscription',
+      details: `Super Admin manually extended trial by ${hours} hours (${(hours / 24).toFixed(1)} days) for "${tenants[tIdx]?.name || tenantId}". New expiry: ${newExpiry}. Reason: ${reason || 'Authority manual extension'}.`,
+    });
+
+    return { success: true, expiryDate: newExpiry };
   }
 
   // --- PLANS ---
@@ -670,6 +775,12 @@ class SaasStorageService {
     }
 
     // Check Tenant Status (Security Boundary)
+    if (tenant.status === 'deactivated') {
+      return {
+        success: false,
+        error: `Your library's 3-day Free trial has expired. To restore access, please upgrade your subscription or contact the MBT Library authority.`,
+      };
+    }
     if (tenant.status === 'suspended') {
       return {
         success: false,
@@ -853,6 +964,43 @@ class SaasStorageService {
     };
   }
 
+  // Tenant Status & Deactivation Assertion
+  assertTenantActive(tenantId: string): { active: boolean; error?: string } {
+    this.checkAndEnforceTrialExpirations();
+    const tenant = this.getTenantById(tenantId);
+    if (!tenant) {
+      return { active: false, error: 'Library not found.' };
+    }
+    if (tenant.status === 'deactivated') {
+      return {
+        active: false,
+        error: `Your library's 3-day Free trial has expired. To restore access, please upgrade your subscription or contact the MBT Library authority.`,
+      };
+    }
+    if (tenant.status === 'suspended') {
+      return {
+        active: false,
+        error: `Access to ${tenant.name} is currently suspended by MBT Library authority.`,
+      };
+    }
+    if (tenant.status === 'archived') {
+      return {
+        active: false,
+        error: `This library archive has been decommissioned. Access is restricted.`,
+      };
+    }
+
+    const sub = this.getSubscriptionForTenant(tenantId);
+    if (sub && sub.status === 'expired') {
+      return {
+        active: false,
+        error: `Your library's 3-day Free trial has expired. To restore access, please upgrade your subscription or contact the MBT Library authority.`,
+      };
+    }
+
+    return { active: true };
+  }
+
   // Check Subscription Limits (Server & Client Enforcement)
   checkSubscriptionLimit(
     tenantId: string,
@@ -862,6 +1010,11 @@ class SaasStorageService {
     const tenant = this.getTenantById(tenantId);
     if (!tenant) {
       return { allowed: true, current: 0, limit: 999999 };
+    }
+
+    const activeCheck = this.assertTenantActive(tenantId);
+    if (!activeCheck.active) {
+      return { allowed: false, current: 0, limit: 0, message: activeCheck.error };
     }
 
     const effective = this.getEffectiveLimits(tenantId);
@@ -1173,9 +1326,11 @@ class SaasStorageService {
     let status: TenantStatus = payload.isTrial ? 'trial' : 'active';
     let subStatus: SubscriptionStatus = payload.isTrial ? 'trial' : 'active';
 
-    if (payload.isTrial) {
-      const days = payload.trialDays || 14;
-      const exp = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    if (plan.code === 'free' || payload.isTrial) {
+      // Free plan has strict 3-day (72 hours) trial duration
+      status = 'trial';
+      subStatus = 'trial';
+      const exp = new Date(now.getTime() + 72 * 60 * 60 * 1000);
       expiryDate = exp.toISOString();
     } else {
       const months = payload.billingCycle === 'annual' ? 12 : 1;
@@ -1201,7 +1356,7 @@ class SaasStorageService {
           currency: 'INR',
           primaryColor: payload.primaryColor || '#2563eb',
           allowStudentReservations: true,
-          defaultLoanPeriodDays: 14,
+          defaultLoanPeriodDays: 7,
           maxBooksPerStudent: 5,
           finePerDay: 5,
           contactEmail: payload.contactEmail || cleanEmail,
@@ -1516,6 +1671,9 @@ class SaasStorageService {
     const tenant = this.getTenantById(tenantId);
     if (!tenant) return { success: false, error: 'Tenant library not found.' };
 
+    const activeCheck = this.assertTenantActive(tenantId);
+    if (!activeCheck.active) return { success: false, error: activeCheck.error };
+
     const books = getFromStorage<Book[]>(STORAGE_KEYS.BOOKS, INITIAL_BOOKS);
     const book = books.find((b) => b.id === bookId || b.isbn === copyAccessionOrBarcode);
     if (!book || book.tenantId !== tenantId) {
@@ -1636,6 +1794,9 @@ class SaasStorageService {
     if (idx === -1) return { success: false, error: 'Loan record not found.' };
 
     const loan = loans[idx];
+    const activeCheck = this.assertTenantActive(loan.tenantId);
+    if (!activeCheck.active) return { success: false, error: activeCheck.error };
+
     if (loan.status === 'returned') {
       return { success: false, error: 'This book has already been marked returned.' };
     }
@@ -1810,12 +1971,15 @@ class SaasStorageService {
     return true;
   }
 
-  renewBookLoan(loanId: string, additionalDays = 14): { success: boolean; loan?: Loan; error?: string } {
+  renewBookLoan(loanId: string, additionalDays = 7): { success: boolean; loan?: Loan; error?: string } {
     const loans = getFromStorage<Loan[]>(STORAGE_KEYS.LOANS, INITIAL_LOANS);
     const idx = loans.findIndex((l) => l.id === loanId);
     if (idx === -1) return { success: false, error: 'Loan record not found.' };
 
     const loan = loans[idx];
+    const activeCheck = this.assertTenantActive(loan.tenantId);
+    if (!activeCheck.active) return { success: false, error: activeCheck.error };
+
     if (loan.status !== 'active') {
       return { success: false, error: 'Only active loans can be renewed.' };
     }

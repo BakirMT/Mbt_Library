@@ -4,7 +4,7 @@ import { useRouter } from '../../router/RouterContext';
 
 export const SuperAdminLogin: React.FC = () => {
   const { loginSuperAdmin, navigate } = useRouter();
-  const [email, setEmail] = useState('superadmin@mbtlibrary.com');
+  const [email, setEmail] = useState('mbtofficial26@gmail.com');
   const [password, setPassword] = useState('mbt@Admin2026!');
   const [error, setError] = useState<string | null>(null);
 
@@ -81,7 +81,7 @@ export const SuperAdminLogin: React.FC = () => {
           {/* Seed credentials indicator for evaluator */}
           <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-700/60 text-[11px] text-slate-400">
             <div className="font-semibold text-slate-300 mb-0.5">Pre-Bootstrapped Platform Owner:</div>
-            <div>Email: <code className="text-blue-400">superadmin@mbtlibrary.com</code></div>
+            <div>Email: <code className="text-blue-400">mbtofficial26@gmail.com</code></div>
             <div>Password: <code className="text-blue-400">mbt@Admin2026!</code></div>
           </div>
 

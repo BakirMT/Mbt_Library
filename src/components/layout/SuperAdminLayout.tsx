@@ -123,10 +123,19 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
         </div>
       </div>
 
+      {/* Mobile Backdrop Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-slate-950/60 z-25 backdrop-blur-xs md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar - MBT Navy Blue Design System */}
       <aside
-        className={`fixed md:sticky top-0 z-30 h-screen w-72 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800/80 transition-transform duration-200 ease-in-out md:translate-x-0 ${
-          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        className={`fixed md:sticky top-0 z-30 h-screen w-72 md:w-64 lg:w-72 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800/80 transition-transform duration-200 ease-in-out md:translate-x-0 shrink-0 ${
+          mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'
         }`}
       >
         {/* Brand Header */}
@@ -268,17 +277,17 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top Navbar */}
-        <header className="bg-white border-b border-slate-200 px-6 py-3.5 sticky top-0 z-20 shadow-xs flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div>
-              <div className="flex items-center space-x-2 text-xs text-slate-500">
-                <span>Platform Owner</span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                <span className="font-semibold text-slate-700 capitalize">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 sm:py-3.5 sticky top-0 z-20 shadow-xs flex items-center justify-between gap-3">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="min-w-0">
+              <div className="flex items-center space-x-1.5 text-xs text-slate-500 truncate">
+                <span className="hidden xs:inline">Platform Owner</span>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0 hidden xs:inline" />
+                <span className="font-semibold text-slate-700 capitalize truncate">
                   {activeTab.replace('_', ' ')}
                 </span>
               </div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight capitalize">
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight capitalize truncate">
                 {activeTab === 'overview'
                   ? 'Super Admin Dashboard'
                   : activeTab === 'libraries'
@@ -294,13 +303,13 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
             {/* Quick action button */}
             <button
               onClick={onOpenProvisionModal}
-              className="hidden sm:inline-flex items-center space-x-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg shadow-xs hover:shadow transition-colors cursor-pointer"
+              className="hidden sm:inline-flex items-center space-x-1.5 px-3 sm:px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg shadow-xs hover:shadow transition-colors cursor-pointer"
             >
-              <PlusCircle className="w-4 h-4" />
+              <PlusCircle className="w-4 h-4 shrink-0" />
               <span>Create Library</span>
             </button>
 
@@ -308,16 +317,16 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
             <div className="relative">
               <button
                 onClick={() => setTenantSelectorOpen(!tenantSelectorOpen)}
-                className="flex items-center space-x-2 px-3 py-2 bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-medium text-xs rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                className="flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3 py-2 bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-medium text-xs rounded-lg border border-slate-200 transition-colors cursor-pointer"
               >
-                <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                 <span className="hidden sm:inline">Preview Tenant Portal</span>
-                <span className="sm:hidden">Portals</span>
+                <span className="sm:hidden text-xs">Portals</span>
               </button>
 
               {tenantSelectorOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-100"
+                  className="absolute right-0 mt-2 w-64 sm:w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-100"
                   onClick={() => setTenantSelectorOpen(false)}
                 >
                   <div className="px-3 py-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
@@ -332,7 +341,7 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
                       >
                         <div className="min-w-0 pr-2">
                           <div className="font-semibold text-slate-800 truncate">{t.name}</div>
-                          <div className="text-[10px] text-slate-500">/l/{t.slug}</div>
+                          <div className="text-[10px] text-slate-500 truncate">/l/{t.slug}</div>
                         </div>
                         <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 shrink-0" />
                       </button>
@@ -345,7 +354,9 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
         </header>
 
         {/* Page Content */}
-        <main className="p-6 max-w-7xl w-full mx-auto space-y-6">{children}</main>
+        <main className="p-3.5 sm:p-5 md:p-6 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6 min-w-0 overflow-x-hidden">
+          {children}
+        </main>
       </div>
     </div>
   );

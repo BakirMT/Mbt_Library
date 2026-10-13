@@ -124,6 +124,7 @@ export const LibrarianPortal: React.FC<LibrarianPortalProps> = ({ tenant }) => {
 
   // Notice feedback
   const [noticeToast, setNoticeToast] = useState<string | null>(null);
+  const [deleteCopyConfirmId, setDeleteCopyConfirmId] = useState<string | null>(null);
 
   // Data fetching from storage
   const books = saasStorage.getBooksForTenant(tenant.id);
@@ -233,7 +234,7 @@ export const LibrarianPortal: React.FC<LibrarianPortalProps> = ({ tenant }) => {
         setCirculationFeedback({
           type: 'success',
           message: `Book "${res.loan.bookTitle}" returned successfully! Copy condition logged as "${returnCondition}".${
-            res.loan.fineAmount > 0 ? ` Overdue fine of $${res.loan.fineAmount.toFixed(2)} assessed.` : ''
+            res.loan.fineAmount > 0 ? ` Overdue fine of ₹${res.loan.fineAmount.toFixed(2)} assessed.` : ''
           }`,
         });
         setReturnConditionModal(null);
@@ -288,7 +289,7 @@ export const LibrarianPortal: React.FC<LibrarianPortalProps> = ({ tenant }) => {
       setNonce((n) => n + 1);
       setTimeout(() => setHoldSuccessMsg(null), 4000);
     } catch (err: any) {
-      alert(`Failed to fulfill hold in database: ${err.message}`);
+      setNoticeToast(`Failed to fulfill hold in database: ${err.message}`);
     }
   };
 
@@ -308,7 +309,7 @@ export const LibrarianPortal: React.FC<LibrarianPortalProps> = ({ tenant }) => {
       });
       setNonce((n) => n + 1);
     } catch (err: any) {
-      alert(`Failed to record fine payment in database: ${err.message}`);
+      setNoticeToast(`Failed to record fine payment in database: ${err.message}`);
     }
   };
 
@@ -329,12 +330,12 @@ export const LibrarianPortal: React.FC<LibrarianPortalProps> = ({ tenant }) => {
         actorRole: 'librarian',
         action: 'FINE_WAIVED',
         category: 'library_admin',
-        details: `Waived $${waiveModalOpen.amount.toFixed(2)} fine for ${waiveModalOpen.studentName}. Reason: ${waiveReason}`,
+        details: `Waived ₹${waiveModalOpen.amount.toFixed(2)} fine for ${waiveModalOpen.studentName}. Reason: ${waiveReason}`,
       });
       setWaiveModalOpen(null);
       setNonce((n) => n + 1);
     } catch (err: any) {
-      alert(`Failed to waive fine in database: ${err.message}`);
+      setNoticeToast(`Failed to waive fine in database: ${err.message}`);
     }
   };
 
@@ -360,7 +361,7 @@ export const LibrarianPortal: React.FC<LibrarianPortalProps> = ({ tenant }) => {
       setNewCopyShelf('');
       setNonce((n) => n + 1);
     } catch (err: any) {
-      alert(`Failed to create physical copy in database: ${err.message}`);
+      setNoticeToast(`Failed to create physical copy in database: ${err.message}`);
     }
   };
 
@@ -924,17 +925,38 @@ export const LibrarianPortal: React.FC<LibrarianPortalProps> = ({ tenant }) => {
                           Barcode Label
                         </button>
                         {c.status !== 'loaned' && (
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`Delete physical copy ${c.accessionNumber}?`)) {
-                                saasStorage.deletePhysicalCopy(c.id);
-                                setNonce((n) => n + 1);
-                              }
-                            }}
-                            className="px-2 py-1 text-rose-600 hover:bg-rose-50 font-semibold rounded text-[10px] cursor-pointer"
-                          >
-                            Delete
-                          </button>
+                          deleteCopyConfirmId === c.id ? (
+                            <div className="inline-flex items-center space-x-1.5 bg-rose-50 p-1 rounded border border-rose-200">
+                              <span className="text-[10px] text-rose-700 font-bold px-1">Delete?</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  saasStorage.deletePhysicalCopy(c.id);
+                                  setDeleteCopyConfirmId(null);
+                                  setNonce((n) => n + 1);
+                                  setNoticeToast(`Physical copy ${c.accessionNumber} deleted.`);
+                                }}
+                                className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteCopyConfirmId(null)}
+                                className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-semibold cursor-pointer"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteCopyConfirmId(c.id)}
+                              className="px-2 py-1 text-rose-600 hover:bg-rose-50 font-semibold rounded text-[10px] cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          )
                         )}
                       </td>
                     </tr>

@@ -17,6 +17,7 @@ export type SubscriptionStatus =
 export type TenantStatus = 
   | 'active'
   | 'trial'
+  | 'deactivated'
   | 'suspended'
   | 'archived'
   | 'pending_setup';

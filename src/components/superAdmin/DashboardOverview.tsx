@@ -45,6 +45,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const totalLibraries = tenants.length;
   const activeTenants = tenants.filter((t) => t.status === 'active').length;
   const trialTenants = tenants.filter((t) => t.status === 'trial').length;
+  const deactivatedTenants = tenants.filter((t) => t.status === 'deactivated').length;
   const suspendedTenants = tenants.filter((t) => t.status === 'suspended').length;
   const archivedTenants = tenants.filter((t) => t.status === 'archived').length;
 
@@ -64,13 +65,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     .filter((inv) => inv.status === 'pending' || inv.status === 'overdue')
     .reduce((acc, inv) => acc + inv.amount, 0);
 
-  // Subscriptions expiring within 14 days
+  // Subscriptions expiring within 14 days or currently expired
   const now = new Date().getTime();
   const expiringSubscriptions = subscriptions
     .filter((sub) => {
       const expDate = new Date(sub.expiryDate).getTime();
       const daysRemaining = (expDate - now) / (1000 * 3600 * 24);
-      return daysRemaining <= 14 && sub.status !== 'suspended' && sub.status !== 'cancelled';
+      return (daysRemaining <= 14 || sub.status === 'expired') && sub.status !== 'cancelled';
     })
     .map((sub) => {
       const tenant = tenants.find((t) => t.id === sub.tenantId);
@@ -83,7 +84,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         daysLeft,
       };
     })
-    .sort((a, b) => a.daysLeft - b.daysLeft);
+    .sort((a, b) => {
+      if (a.status === 'expired' && b.status !== 'expired') return -1;
+      if (b.status === 'expired' && a.status !== 'expired') return 1;
+      return a.daysLeft - b.daysLeft;
+    });
 
   const handleSendReminder = (tenantId: string) => {
     const success = saasStorage.sendSubscriptionExpiryReminder(tenantId);
@@ -166,7 +171,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <strong className="text-blue-700">{trialTenants}</strong> Trial
             </span>
             <span>
-              <strong className="text-rose-600">{suspendedTenants}</strong> Suspended
+              {deactivatedTenants > 0 && (
+                <strong className="text-rose-600 mr-2">{deactivatedTenants} Expired</strong>
+              )}
+              <strong className="text-amber-600">{suspendedTenants}</strong> Suspended
             </span>
           </div>
         </div>
@@ -183,13 +191,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="mt-3 flex items-baseline space-x-2">
             <span className="text-2xl font-black text-slate-900">
-              ${totalRevenue.toLocaleString()}
+              ₹{totalRevenue.toLocaleString('en-IN')}
             </span>
             <span className="text-xs text-slate-500">collected</span>
           </div>
           <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
             <span>
-              Pending: <strong className="text-amber-600">${pendingRevenue.toLocaleString()}</strong>
+              Pending: <strong className="text-amber-600">₹{pendingRevenue.toLocaleString('en-IN')}</strong>
             </span>
             <button
               onClick={() => onNavigateTab('billing')}
@@ -346,8 +354,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <p className="text-xs text-slate-400">All tenant subscriptions are healthy and active.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-left text-xs min-w-[640px]">
               <thead className="bg-slate-50/70 text-slate-500 border-b border-slate-100">
                 <tr>
                   <th className="px-5 py-3 font-semibold">Library / Institution</th>
@@ -373,40 +381,64 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     </td>
                     <td className="px-5 py-3.5 text-slate-600">
                       <div className="flex items-center space-x-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>{new Date(sub.expiryDate).toLocaleDateString()}</span>
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
-                          sub.daysLeft <= 5
+                          sub.status === 'expired' || sub.tenant?.status === 'deactivated'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
+                            : sub.daysLeft <= 5
                             ? 'bg-rose-100 text-rose-700 border border-rose-200'
                             : 'bg-amber-100 text-amber-800 border border-amber-200'
                         }`}
                       >
-                        <Clock className="w-3 h-3 mr-1" />
-                        {sub.daysLeft <= 0 ? 'Expires Today' : `${sub.daysLeft} days left`}
+                        <Clock className="w-3 h-3 mr-1 shrink-0" />
+                        {sub.status === 'expired' || sub.tenant?.status === 'deactivated'
+                          ? 'Trial Expired (Deactivated)'
+                          : sub.daysLeft <= 0
+                          ? 'Expires Today'
+                          : `${sub.daysLeft} days left`}
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-slate-600">
                       {sub.gracePeriodDays} days allowed
                     </td>
-                    <td className="px-5 py-3.5 text-right space-x-2">
-                      <button
-                        onClick={() => handleSendReminder(sub.tenantId)}
-                        disabled={!!reminderStatus[sub.tenantId]}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium rounded text-xs transition-colors cursor-pointer disabled:opacity-60"
-                      >
-                        <Send className="w-3 h-3" />
-                        <span>{reminderStatus[sub.tenantId] || 'Send Alert'}</span>
-                      </button>
-                      <button
-                        onClick={() => onNavigateTab('libraries')}
-                        className="inline-flex items-center px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded text-xs transition-colors cursor-pointer"
-                      >
-                        Manage
-                      </button>
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        {sub.status === 'expired' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              saasStorage.extendTrial(sub.tenantId, 72, 'Super Admin manual trial extension from Dashboard alert');
+                              onNavigateTab('libraries');
+                            }}
+                            title="Extend 72-Hour Trial"
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold rounded text-xs transition-colors cursor-pointer"
+                          >
+                            <Clock className="w-3 h-3 shrink-0" />
+                            <span>Extend +72h</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleSendReminder(sub.tenantId)}
+                          disabled={!!reminderStatus[sub.tenantId]}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium rounded text-xs transition-colors cursor-pointer disabled:opacity-60"
+                        >
+                          <Send className="w-3 h-3 shrink-0" />
+                          <span>{reminderStatus[sub.tenantId] || 'Send Alert'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onNavigateTab('libraries')}
+                          className="inline-flex items-center px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded text-xs transition-colors cursor-pointer"
+                        >
+                          Manage
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

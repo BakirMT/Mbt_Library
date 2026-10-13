@@ -153,8 +153,8 @@ export const BillingInvoicesManager: React.FC = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full text-left text-xs min-w-[720px]">
             <thead className="bg-slate-50/70 text-slate-500 border-b border-slate-200">
               <tr>
                 <th className="px-5 py-3 font-semibold">Invoice Number</th>
@@ -201,28 +201,32 @@ export const BillingInvoicesManager: React.FC = () => {
                       {inv.status}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-right space-x-2">
-                    {inv.status !== 'paid' ? (
-                      <button
-                        onClick={() => setSelectedInvoiceForPayment(inv)}
-                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded text-xs cursor-pointer shadow-2xs"
-                      >
-                        Record Payment
-                      </button>
-                    ) : (
-                      <span className="text-[11px] text-emerald-700 font-semibold inline-flex items-center">
-                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                        {inv.paymentMethod || 'Paid'}
-                      </span>
-                    )}
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center justify-end gap-1.5">
+                      {inv.status !== 'paid' ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedInvoiceForPayment(inv)}
+                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded text-xs cursor-pointer shadow-2xs"
+                        >
+                          Record Payment
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-emerald-700 font-semibold inline-flex items-center px-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600 shrink-0" />
+                          {inv.paymentMethod || 'Paid'}
+                        </span>
+                      )}
 
-                    <button
-                      onClick={() => handleSendReminder(inv.tenantId)}
-                      disabled={!!reminderStatus[inv.tenantId]}
-                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium cursor-pointer disabled:opacity-50"
-                    >
-                      {reminderStatus[inv.tenantId] || 'Send Reminder'}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSendReminder(inv.tenantId)}
+                        disabled={!!reminderStatus[inv.tenantId]}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium cursor-pointer disabled:opacity-50"
+                      >
+                        {reminderStatus[inv.tenantId] || 'Send Reminder'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

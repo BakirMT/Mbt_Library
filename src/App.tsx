@@ -20,7 +20,16 @@ import { LibraryAdminPortal } from './components/tenant/LibraryAdminPortal';
 import { LibrarianPortal } from './components/tenant/LibrarianPortal';
 import { StudentPortal } from './components/tenant/StudentPortal';
 import { AcceptInvitationPage } from './components/invitation/AcceptInvitationPage';
-import { Building2, ShieldCheck, BookOpen, Users, ArrowRight, Lock, ArrowLeft } from 'lucide-react';
+import { ExpiredLibraryPage } from './components/tenant/ExpiredLibraryPage';
+import { PublicHomePage } from './components/public/PublicHomePage';
+import { PlansPage } from './components/public/PlansPage';
+import { FeaturesPage } from './components/public/FeaturesPage';
+import { ContactPage } from './components/public/ContactPage';
+import { LoginAuthPage } from './components/public/LoginAuthPage';
+import { RegisterAuthPage } from './components/public/RegisterAuthPage';
+import { VerifyOtpPage } from './components/public/VerifyOtpPage';
+import { CheckoutRegistrationPage } from './components/public/CheckoutRegistrationPage';
+import { Building2, ShieldCheck, BookOpen, Users, ArrowRight, Lock, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { saasStorage } from './services/storage';
 
 const AppContent: React.FC = () => {
@@ -35,113 +44,127 @@ const AppContent: React.FC = () => {
     }
   }, [route.tab]);
 
+  // Public Website & Auth Routes
+  if (route.type === 'home') return <PublicHomePage />;
+  if (route.type === 'plans') return <PlansPage />;
+  if (route.type === 'features') return <FeaturesPage />;
+  if (route.type === 'contact') return <ContactPage />;
+  if (route.type === 'login') return <LoginAuthPage />;
+  if (route.type === 'register') return <RegisterAuthPage />;
+  if (route.type === 'verify') return <VerifyOtpPage />;
+  if (route.type === 'checkout') return <CheckoutRegistrationPage />;
+
   // 1. Acceptance of invitation: /invite/:token
   if (route.type === 'accept_invitation' && route.inviteToken) {
     return <AcceptInvitationPage token={route.inviteToken} />;
   }
 
-  // 2. Tenant Landing Page: /l/:slug
-  if (route.type === 'tenant_landing') {
-    if (activeTenant) {
-      return <TenantLandingPage tenant={activeTenant} />;
-    }
-    // Tenant not found
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 text-center font-sans">
-        <div className="bg-white rounded-2xl p-8 max-w-md w-full border border-slate-200 shadow-xl space-y-4">
-          <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-            <Building2 className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-900">Library Not Found</h2>
-          <p className="text-xs text-slate-500">
-            No library is registered under slug <code className="font-mono text-rose-600">/l/{route.tenantSlug}</code>.
-          </p>
-          <div className="pt-2 space-y-2">
-            <button
-              onClick={() => navigate('/super-admin')}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
-            >
-              Go to MBT Super Admin Portal
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // 2. Multi-Tenant Routes (/l/:slug/...)
+  if (route.tenantSlug) {
+    // Run automated trial expiration check (trusted server/storage timestamp)
+    saasStorage.checkAndEnforceTrialExpirations();
+    const targetTenant = activeTenant || saasStorage.getTenantBySlug(route.tenantSlug);
 
-  // 3. Tenant-Specific Login Portals:
-  // /l/:slug/admin/login, /l/:slug/librarian/login, /l/:slug/student/login
-  if (
-    route.type === 'tenant_admin_login' ||
-    route.type === 'tenant_librarian_login' ||
-    route.type === 'tenant_student_login'
-  ) {
-    const targetTenant = activeTenant || saasStorage.getTenantBySlug(route.tenantSlug || '');
+    // If tenant does not exist
     if (!targetTenant) {
       return (
-        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-center text-white">
-          <div className="bg-slate-800 p-8 rounded-2xl max-w-md w-full space-y-3">
-            <h2 className="text-lg font-bold">Library Not Found</h2>
-            <p className="text-xs text-slate-400">The requested library slug does not exist.</p>
-            <button
-              onClick={() => navigate('/super-admin')}
-              className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg"
-            >
-              Back to Super Admin
-            </button>
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 text-center font-sans">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full border border-slate-200 shadow-xl space-y-4">
+            <div className="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Library Not Found</h2>
+            <p className="text-xs text-slate-500">
+              No library is registered under slug <code className="font-mono text-rose-600">/l/{route.tenantSlug}</code>.
+            </p>
+            <div className="pt-2 space-y-2">
+              <button
+                onClick={() => navigate('/super-admin')}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                Go to MBT Super Admin Portal
+              </button>
+            </div>
           </div>
         </div>
       );
     }
 
-    const role =
-      route.type === 'tenant_admin_login'
-        ? 'admin'
-        : route.type === 'tenant_librarian_login'
-        ? 'librarian'
-        : 'student';
+    // Check Subscription & Expiry Status (Strict 72-Hour Trial Enforcement)
+    const subscription = saasStorage.getSubscriptionForTenant(targetTenant.id);
+    const now = Date.now();
+    const isFreeOrTrial = subscription ? (subscription.planId === 'plan_free' || subscription.status === 'trial') : false;
+    const isTrialExpired = subscription ? (isFreeOrTrial && now >= new Date(subscription.expiryDate).getTime()) : false;
+    const isDeactivatedOrExpired = targetTenant.status === 'deactivated' || subscription?.status === 'expired' || isTrialExpired;
 
-    return <TenantLogin tenant={targetTenant} role={role} />;
-  }
+    // Requirement 2 & 4: Dedicated Expired Library Page
+    // Blocks public landing page, catalogue, Library Admin dashboard, Librarian portal, and Student portal.
+    // Existing sessions cannot bypass this check.
+    if (isDeactivatedOrExpired) {
+      return <ExpiredLibraryPage tenant={targetTenant} />;
+    }
 
-  // 4. Tenant-Specific Logged-In Portals (Level 2, Level 3, Level 4):
-  // /l/:slug/admin
-  if (route.type === 'tenant_admin_portal') {
-    const targetTenant = activeTenant || saasStorage.getTenantBySlug(route.tenantSlug || '');
-    if (!targetTenant) {
+    // Requirement 7 & 8: Separately Suspended Library Check
+    if (targetTenant.status === 'suspended') {
       return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-xl text-center">Library Not Found</div>
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-center font-sans text-white">
+          <div className="bg-slate-800 rounded-3xl p-8 max-w-md w-full border border-slate-700 shadow-2xl space-y-5">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/30">
+              <Lock className="w-7 h-7" />
+            </div>
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
+                Institutional Access Suspended
+              </span>
+              <h2 className="text-xl font-black text-white">{targetTenant.name}</h2>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Access to this library has been suspended by the MBT Library authority. All portal activities and catalogue queries are disabled until reactivated by the Super Admin.
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                onClick={() => navigate('/super-admin')}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Go to MBT Super Admin Portal
+              </button>
+            </div>
+          </div>
         </div>
       );
     }
-    return <LibraryAdminPortal tenant={targetTenant} />;
-  }
 
-  // /l/:slug/librarian
-  if (route.type === 'tenant_librarian_portal') {
-    const targetTenant = activeTenant || saasStorage.getTenantBySlug(route.tenantSlug || '');
-    if (!targetTenant) {
-      return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-xl text-center">Library Not Found</div>
-        </div>
-      );
+    // Active Library: Render Respective Pages / Portals
+    if (route.type === 'tenant_landing') {
+      return <TenantLandingPage tenant={targetTenant} />;
     }
-    return <LibrarianPortal tenant={targetTenant} />;
-  }
 
-  // /l/:slug/student
-  if (route.type === 'tenant_student_portal') {
-    const targetTenant = activeTenant || saasStorage.getTenantBySlug(route.tenantSlug || '');
-    if (!targetTenant) {
-      return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-xl text-center">Library Not Found</div>
-        </div>
-      );
+    if (
+      route.type === 'tenant_admin_login' ||
+      route.type === 'tenant_librarian_login' ||
+      route.type === 'tenant_student_login'
+    ) {
+      const role =
+        route.type === 'tenant_admin_login'
+          ? 'admin'
+          : route.type === 'tenant_librarian_login'
+          ? 'librarian'
+          : 'student';
+
+      return <TenantLogin tenant={targetTenant} role={role} />;
     }
-    return <StudentPortal tenant={targetTenant} />;
+
+    if (route.type === 'tenant_admin_portal') {
+      return <LibraryAdminPortal tenant={targetTenant} />;
+    }
+
+    if (route.type === 'tenant_librarian_portal') {
+      return <LibrarianPortal tenant={targetTenant} />;
+    }
+
+    if (route.type === 'tenant_student_portal') {
+      return <StudentPortal tenant={targetTenant} />;
+    }
   }
 
   // 5. Super Admin Login

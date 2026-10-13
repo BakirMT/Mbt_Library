@@ -179,6 +179,8 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
 
   // Refresh trigger
   const [nonce, setNonce] = useState(0);
+  const [deleteBookConfirmId, setDeleteBookConfirmId] = useState<string | null>(null);
+  const [deleteCopyConfirmId, setDeleteCopyConfirmId] = useState<string | null>(null);
 
   // Data queries
   const subscription = saasStorage.getSubscriptionForTenant(tenant.id);
@@ -378,7 +380,7 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
       actorRole: 'library_admin',
       action: 'FINE_WAIVED',
       category: 'library_admin',
-      details: `Waived $${waiveModalOpen.amount.toFixed(2)} fine for ${waiveModalOpen.studentName}. Reason: ${waiveReason}`,
+      details: `Waived ₹${waiveModalOpen.amount.toFixed(2)} fine for ${waiveModalOpen.studentName}. Reason: ${waiveReason}`,
     });
     setWaiveModalOpen(null);
     setNonce((n) => n + 1);
@@ -685,18 +687,38 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
                         <span className="font-bold text-slate-900">{b.copiesAvailable}</span>
                         <span className="text-slate-400"> / {b.copiesTotal} available</span>
                       </td>
-                      <td className="px-5 py-3.5 text-right space-x-2">
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Delete "${b.title}" from catalogue?`)) {
-                              saasStorage.deleteBook(b.id);
-                              setNonce((n) => n + 1);
-                            }
-                          }}
-                          className="text-rose-600 hover:text-rose-800 cursor-pointer font-semibold"
-                        >
-                          Delete
-                        </button>
+                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                        {deleteBookConfirmId === b.id ? (
+                          <div className="inline-flex items-center space-x-1.5 bg-rose-50 p-1 rounded border border-rose-200">
+                            <span className="text-[10px] text-rose-700 font-bold px-1">Delete?</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                saasStorage.deleteBook(b.id);
+                                setDeleteBookConfirmId(null);
+                                setNonce((n) => n + 1);
+                              }}
+                              className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteBookConfirmId(null)}
+                              className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-semibold cursor-pointer"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteBookConfirmId(b.id)}
+                            className="text-rose-600 hover:text-rose-800 cursor-pointer font-semibold text-xs"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -841,17 +863,37 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
                           Spine Label
                         </button>
                         {c.status !== 'loaned' && (
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`Delete physical copy ${c.accessionNumber}?`)) {
-                                saasStorage.deletePhysicalCopy(c.id);
-                                setNonce((n) => n + 1);
-                              }
-                            }}
-                            className="px-2 py-1 text-rose-600 hover:bg-rose-50 font-semibold rounded text-[10px] cursor-pointer"
-                          >
-                            Delete
-                          </button>
+                          deleteCopyConfirmId === c.id ? (
+                            <div className="inline-flex items-center space-x-1.5 bg-rose-50 p-1 rounded border border-rose-200">
+                              <span className="text-[10px] text-rose-700 font-bold px-1">Delete?</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  saasStorage.deletePhysicalCopy(c.id);
+                                  setDeleteCopyConfirmId(null);
+                                  setNonce((n) => n + 1);
+                                }}
+                                className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteCopyConfirmId(null)}
+                                className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-semibold cursor-pointer"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteCopyConfirmId(c.id)}
+                              className="px-2 py-1 text-rose-600 hover:bg-rose-50 font-semibold rounded text-[10px] cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          )
                         )}
                       </td>
                     </tr>
@@ -1111,7 +1153,7 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
                         <tr key={f.id} className="hover:bg-slate-50/70">
                           <td className="py-3 px-3 font-semibold text-slate-800">{f.userName}</td>
                           <td className="py-3 px-3 text-slate-700">{f.bookTitle}</td>
-                          <td className="py-3 px-3 font-bold text-slate-900">${f.amount.toFixed(2)}</td>
+                          <td className="py-3 px-3 font-bold text-slate-900">₹{f.amount.toFixed(2)}</td>
                           <td className="py-3 px-3">
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -1130,12 +1172,14 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
                             {f.status === 'pending' && (
                               <>
                                 <button
+                                  type="button"
                                   onClick={() => handleCollectFine(f)}
                                   className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded cursor-pointer"
                                 >
-                                  Collect ${f.amount.toFixed(2)}
+                                  Collect ₹{f.amount.toFixed(2)}
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() =>
                                     setWaiveModalOpen({
                                       fineId: f.id,
@@ -1967,7 +2011,7 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <h3 className="font-bold text-slate-900 text-sm">Authorize Fine Waiver</h3>
             <p className="text-xs text-slate-500">
-              Waive ${waiveModalOpen.amount.toFixed(2)} fine for <strong>{waiveModalOpen.studentName}</strong>:
+              Waive ₹{waiveModalOpen.amount.toFixed(2)} fine for <strong>{waiveModalOpen.studentName}</strong>:
             </p>
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 mb-1">Waiver Justification Reason:</label>

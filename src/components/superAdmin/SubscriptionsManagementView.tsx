@@ -397,8 +397,8 @@ export const SubscriptionsManagementView: React.FC = () => {
 
           {/* Libraries Subscriptions Table */}
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-left text-xs min-w-[840px]">
                 <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-200 uppercase font-semibold tracking-wider text-[10px]">
                   <tr>
                     <th className="px-4 py-3">Library & Unique ID</th>

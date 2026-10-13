@@ -36,65 +36,65 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col">
       {/* Top Multi-Tenant Admin Banner for seamless demo navigation */}
-      <div className="bg-slate-900 text-slate-300 px-4 py-2 text-xs flex items-center justify-between border-b border-slate-800">
-        <div className="flex items-center space-x-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-semibold text-white">Multi-Tenant Route Resolved:</span>
-          <code className="text-blue-400 font-mono">/l/{tenant.slug}</code>
-          <span className="text-slate-400 hidden sm:inline">
+      <div className="bg-slate-900 text-slate-300 px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-slate-800">
+        <div className="flex items-center space-x-2 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="font-semibold text-white truncate">Multi-Tenant Route:</span>
+          <code className="text-blue-400 font-mono text-[11px] truncate">/l/{tenant.slug}</code>
+          <span className="text-slate-400 hidden md:inline truncate">
             ({tenant.institutionType.replace('_', ' ')})
           </span>
         </div>
         <button
           onClick={() => navigate('/super-admin?tab=libraries')}
-          className="text-xs text-blue-400 hover:text-white flex items-center space-x-1 font-semibold cursor-pointer"
+          className="text-xs text-blue-400 hover:text-white flex items-center space-x-1 font-semibold cursor-pointer shrink-0 self-start sm:self-auto"
         >
-          <span>← Back to MBT Super Admin Portal</span>
+          <span>← Back to MBT Super Admin</span>
         </button>
       </div>
 
       {/* Institution Main Header */}
       <header className="bg-white border-b border-slate-200 shadow-xs sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3.5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3.5 min-w-0">
             <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-sm shrink-0"
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white font-black text-base sm:text-lg shadow-sm shrink-0"
               style={{ backgroundColor: brandColor }}
             >
               {tenant.logoInitials}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-2">
-                <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight">
+                <h1 className="text-base sm:text-lg md:text-xl font-black text-slate-900 tracking-tight truncate">
                   {tenant.name}
                 </h1>
                 <span
-                  className="px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase"
+                  className="px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase shrink-0"
                   style={{ backgroundColor: brandColor }}
                 >
                   {tenant.status}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium">{tenant.institutionName}</p>
+              <p className="text-xs text-slate-500 font-medium truncate">{tenant.institutionName}</p>
             </div>
           </div>
 
-          <div className="hidden md:flex items-center space-x-3 text-xs">
+          <div className="flex items-center space-x-2 text-xs overflow-x-auto scrollbar-thin pb-1 sm:pb-0">
             <button
               onClick={() => navigate(`/l/${tenant.slug}/student/login`)}
-              className="px-4 py-2 border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
             >
               Student Portal
             </button>
             <button
               onClick={() => navigate(`/l/${tenant.slug}/librarian/login`)}
-              className="px-4 py-2 border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
             >
               Librarian Desk
             </button>
             <button
               onClick={() => navigate(`/l/${tenant.slug}/admin/login`)}
-              className="px-4 py-2 text-white font-semibold rounded-lg shadow-xs transition-opacity cursor-pointer"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 text-white font-semibold rounded-lg shadow-xs transition-opacity cursor-pointer shrink-0"
               style={{ backgroundColor: brandColor }}
             >
               Library Admin
@@ -104,39 +104,41 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
       </header>
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-b from-white to-slate-100 py-12 px-6 border-b border-slate-200">
-        <div className="max-w-4xl mx-auto text-center space-y-4">
-          <span className="inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            <Sparkles className="w-3.5 h-3.5" />
+      <section className="bg-gradient-to-b from-white to-slate-100 py-8 sm:py-12 px-4 sm:px-6 border-b border-slate-200">
+        <div className="max-w-4xl mx-auto text-center space-y-3 sm:space-y-4">
+          <span className="inline-flex items-center space-x-2 px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
             <span>Dedicated Campus Digital Repository & Library Network</span>
           </span>
-          <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 tracking-tight leading-tight">
             Welcome to {tenant.name}
           </h2>
-          <p className="text-sm md:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm md:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
             Search thousands of catalogued manuscripts, academic textbooks, Islamic literature, and
             research journals. Reserve titles online or visit our circulation desk.
           </p>
 
           {/* Quick OPAC Search bar */}
           <div className="pt-2 max-w-2xl mx-auto">
-            <div className="relative flex items-center shadow-md rounded-xl overflow-hidden border border-slate-300 bg-white">
-              <Search className="w-5 h-5 text-slate-400 ml-4 shrink-0" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search catalogue by title, author, ISBN, accession # or keyword..."
-                className="w-full px-4 py-3.5 text-sm outline-none bg-transparent"
-              />
+            <div className="flex flex-col sm:flex-row shadow-md rounded-xl overflow-hidden border border-slate-300 bg-white">
+              <div className="flex items-center flex-1 px-3 py-2 sm:py-0 min-w-0">
+                <Search className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 shrink-0 mr-2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search catalogue by title, author, ISBN..."
+                  className="w-full text-xs sm:text-sm outline-none bg-transparent py-2"
+                />
+              </div>
               <button
-                className="px-6 py-3.5 text-white font-bold text-xs uppercase tracking-wider shrink-0 transition-opacity"
+                className="w-full sm:w-auto px-5 py-2.5 sm:py-3.5 text-white font-bold text-xs uppercase tracking-wider shrink-0 transition-opacity cursor-pointer"
                 style={{ backgroundColor: brandColor }}
               >
                 Search OPAC
               </button>
             </div>
-            <div className="flex items-center justify-center space-x-4 text-xs text-slate-500 mt-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-500 mt-2">
               <span>Popular: Tafsir Ibn Kathir</span>
               <span>·</span>
               <span>Organic Chemistry</span>
@@ -249,7 +251,7 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
         </div>
 
         {/* Institution Information Strip */}
-        <div className="mt-10 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs grid grid-cols-1 md:grid-cols-4 gap-6 text-xs">
+        <div className="mt-10 bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 text-xs">
           <div className="flex items-start space-x-3">
             <MapPin className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
             <div>

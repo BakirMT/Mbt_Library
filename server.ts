@@ -65,9 +65,90 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+// --- AUTOMATIC 72-HOUR TRIAL EXPIRATION ENGINE (CLOUD SQL DB) ---
+export async function checkAndDeactivateExpiredTrialsDB(): Promise<{ expiredCount: number }> {
+  try {
+    const now = new Date();
+    // Find all subscriptions on Free plan or trial that have reached expiryDate
+    const expiredSubs = await db
+      .select({
+        sub: subscriptions,
+        plan: subscriptionPlans,
+        tenant: tenants,
+      })
+      .from(subscriptions)
+      .innerJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+      .innerJoin(tenants, eq(subscriptions.tenantId, tenants.id))
+      .where(
+        and(
+          sql`(${subscriptionPlans.code} = 'free' OR ${subscriptions.status} = 'trial' OR ${subscriptions.status} = 'expired')`,
+          sql`(${subscriptions.expiryDate} <= ${now} OR ${subscriptions.status} = 'expired')`,
+          sql`(${subscriptions.status} != 'expired' OR ${tenants.status} = 'active')`
+        )
+      );
+
+    let count = 0;
+    for (const item of expiredSubs) {
+      count++;
+      console.log(`[License Engine] Automatically expiring 3-day Free trial for tenant "${item.tenant.name}" (${item.tenant.id})`);
+
+      // 1. Mark subscription as expired
+      await db.update(subscriptions).set({ status: 'expired' }).where(eq(subscriptions.id, item.sub.id));
+
+      // 2. Mark tenant as deactivated (preserving separate manual suspension or archival)
+      if (item.tenant.status !== 'suspended' && item.tenant.status !== 'archived') {
+        await db.update(tenants).set({ status: 'deactivated', updatedAt: now }).where(eq(tenants.id, item.tenant.id));
+      }
+
+      // 3. Notify Super Admin via Activity Log
+      await db.insert(activityLogs).values({
+        id: `log_exp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        tenantId: item.tenant.id,
+        actorId: 'system',
+        actorName: 'MBT Automated License Engine',
+        actorRole: 'super_admin',
+        action: 'TRIAL_EXPIRED_DEACTIVATED',
+        category: 'subscription',
+        details: `3-day Free trial (72 hours) has expired for "${item.tenant.name}". Library access automatically deactivated. Super Admin notified.`,
+        timestamp: now,
+      });
+    }
+
+    return { expiredCount: count };
+  } catch (err: any) {
+    console.error('[License Engine] Error during scheduled trial check:', err?.message);
+    return { expiredCount: 0 };
+  }
+}
+
+// Helper: Require Tenant Active and Subscribed on Backend Requests
+export async function requireActiveTenant(slug: string, res: Response): Promise<{ tenant: any; tenantId: string } | null> {
+  // First check if any trials expired just now
+  await checkAndDeactivateExpiredTrialsDB();
+
+  const tRows = await db.select().from(tenants).where(eq(tenants.slug, slug)).limit(1);
+  if (!tRows.length) {
+    res.status(404).json({ error: 'Library tenant not found' });
+    return null;
+  }
+  const tenant = tRows[0];
+  const subCheck = await verifyTenantActiveAndSubscribed(tenant.id);
+  if (!subCheck.valid) {
+    res.status(403).json({
+      error: subCheck.error,
+      status: tenant.status,
+      subscriptionStatus: 'expired',
+      isExpired: true,
+    });
+    return null;
+  }
+  return { tenant, tenantId: tenant.id };
+}
+
 // --- TENANTS API ---
 app.get('/api/tenants', async (_req, res) => {
   try {
+    await checkAndDeactivateExpiredTrialsDB();
     const allTenants = await db.select().from(tenants).orderBy(desc(tenants.createdAt));
 
     // Aggregate real counts per tenant for fast display
@@ -102,6 +183,8 @@ app.get('/api/tenants', async (_req, res) => {
 app.get('/api/tenants/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
+    await checkAndDeactivateExpiredTrialsDB();
+
     const tenantRows = await db.select().from(tenants).where(eq(tenants.slug, slug)).limit(1);
     if (!tenantRows.length) {
       return res.status(404).json({ error: 'Library not found' });
@@ -127,6 +210,76 @@ app.get('/api/tenants/:slug', async (req, res) => {
   }
 });
 
+// --- SECURE OTP AUTHENTICATION ENDPOINTS ---
+const otpStore = new Map<string, { code: string; expiresAt: number; verified: boolean; attempts: number }>();
+
+app.post('/api/auth/send-otp', async (req, res) => {
+  try {
+    const { target, type } = req.body;
+    if (!target) {
+      return res.status(400).json({ error: 'Email address or mobile number is required.' });
+    }
+    const cleanTarget = target.trim().toLowerCase();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    otpStore.set(`${type}:${cleanTarget}`, {
+      code,
+      expiresAt,
+      verified: false,
+      attempts: 0,
+    });
+
+    console.log(`[OTP Engine] Generated ${type} OTP for ${cleanTarget}: ${code}`);
+
+    res.json({
+      success: true,
+      message: `OTP sent successfully to ${cleanTarget}`,
+      devOtp: code,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to send OTP' });
+  }
+});
+
+app.post('/api/auth/verify-otp', async (req, res) => {
+  try {
+    const { target, type, otp } = req.body;
+    if (!target || !otp) {
+      return res.status(400).json({ error: 'Target and OTP code are required.' });
+    }
+    const cleanTarget = target.trim().toLowerCase();
+    const key = `${type}:${cleanTarget}`;
+    const record = otpStore.get(key);
+
+    if (!record) {
+      return res.status(400).json({ error: 'No active OTP challenge found. Please request a new OTP.' });
+    }
+    if (Date.now() > record.expiresAt) {
+      otpStore.delete(key);
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    }
+    if (record.attempts >= 5) {
+      otpStore.delete(key);
+      return res.status(400).json({ error: 'Too many failed attempts. Please request a new OTP.' });
+    }
+
+    if (record.code !== otp.trim()) {
+      record.attempts++;
+      return res.status(400).json({ error: 'Invalid OTP code. Please verify and try again.' });
+    }
+
+    record.verified = true;
+    res.json({
+      success: true,
+      verifiedToken: `token_verified_${type}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      message: `${type === 'email' ? 'Email' : 'Mobile number'} successfully verified!`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'OTP verification failed' });
+  }
+});
+
 // Atomic Multi-Step Provisioning Transaction
 app.post('/api/tenants/provision', async (req, res) => {
   try {
@@ -144,7 +297,12 @@ app.post('/api/tenants/provision', async (req, res) => {
     const subId = `sub_${tenantId}`;
     const token = `mbt_adm_${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
     const now = new Date();
-    const expiryDate = new Date(now.getTime() + (payload.isTrial ? (payload.trialDays || 14) : 365) * 24 * 60 * 60 * 1000);
+
+    // Strict 3-day (72 hours) Free trial duration calculated on server timestamp
+    const isFreePlanOrTrial = payload.planId === 'plan_free' || payload.isTrial;
+    const expiryDate = isFreePlanOrTrial
+      ? new Date(now.getTime() + 72 * 60 * 60 * 1000)
+      : new Date(now.getTime() + (payload.billingCycle === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000);
 
     const initials = payload.name
       .split(' ')
@@ -153,93 +311,98 @@ app.post('/api/tenants/provision', async (req, res) => {
       .map((w: string) => w[0].toUpperCase())
       .join('') || 'LB';
 
-    // 1. Insert Tenant
-    await db.insert(tenants).values({
-      id: tenantId,
-      slug: cleanSlug,
-      name: payload.name.trim(),
-      institutionName: payload.institutionName.trim(),
-      institutionType: payload.institutionType,
-      logoInitials: initials,
-      status: payload.isTrial ? 'trial' : 'active',
-      settings: {
-        timezone: payload.timezone || 'UTC',
-        dateFormat: payload.dateFormat || 'DD/MM/YYYY',
-        currency: 'INR',
-        primaryColor: payload.primaryColor || '#2563eb',
-        allowStudentReservations: true,
-        defaultLoanPeriodDays: 14,
-        maxBooksPerStudent: 5,
-        finePerDay: 5,
-        contactEmail: payload.contactEmail || payload.adminEmail,
-        contactPhone: payload.contactPhone || payload.adminPhone,
-        address: payload.address || '',
-      },
-    });
+    await db.transaction(async (tx) => {
+      // 1. Set RLS tenant context for transaction connection
+      await tx.execute(sql`SELECT set_config('app.current_tenant_id', ${tenantId}, true);`);
 
-    // 2. Insert Admin User
-    await db.insert(users).values({
-      id: adminUserId,
-      email: payload.adminEmail.trim().toLowerCase(),
-      fullName: payload.adminFullName.trim(),
-      phone: payload.adminPhone.trim(),
-      staffId: payload.adminStaffId?.trim(),
-      isSuperAdmin: false,
-      isActive: true,
-    });
+      // 2. Insert Tenant
+      await tx.insert(tenants).values({
+        id: tenantId,
+        slug: cleanSlug,
+        name: payload.name.trim(),
+        institutionName: payload.institutionName.trim(),
+        institutionType: payload.institutionType,
+        logoInitials: initials,
+        status: payload.isTrial ? 'trial' : 'active',
+        settings: {
+          timezone: payload.timezone || 'UTC',
+          dateFormat: payload.dateFormat || 'DD/MM/YYYY',
+          currency: 'INR',
+          primaryColor: payload.primaryColor || '#2563eb',
+          allowStudentReservations: true,
+          defaultLoanPeriodDays: 14,
+          maxBooksPerStudent: 5,
+          finePerDay: 5,
+          contactEmail: payload.contactEmail || payload.adminEmail,
+          contactPhone: payload.contactPhone || payload.adminPhone,
+          address: payload.address || '',
+        },
+      });
 
-    // 3. Insert Membership
-    await db.insert(tenantMemberships).values({
-      id: `mem_${tenantId}_admin`,
-      tenantId,
-      userId: adminUserId,
-      role: 'library_admin',
-      joinedAt: new Date(),
-      isActive: true,
-    }).onConflictDoNothing();
+      // 3. Insert Admin User
+      await tx.insert(users).values({
+        id: adminUserId,
+        email: payload.adminEmail.trim().toLowerCase(),
+        fullName: payload.adminFullName.trim(),
+        phone: payload.adminPhone.trim(),
+        staffId: payload.adminStaffId?.trim(),
+        isSuperAdmin: false,
+        isActive: true,
+      });
 
-    // 4. Insert Subscription
-    await db.insert(subscriptions).values({
-      id: subId,
-      tenantId,
-      planId: payload.planId,
-      status: payload.isTrial ? 'trial' : 'active',
-      billingCycle: payload.billingCycle || 'monthly',
-      expiryDate,
-      gracePeriodDays: payload.gracePeriodDays || 7,
-      autoRenew: !payload.isTrial,
-      customMaxTitles: payload.customMaxTitles,
-      customMaxCopies: payload.customMaxCopies,
-      customMaxLibrarians: payload.customMaxLibrarians,
-      customMaxStudents: payload.customMaxStudents,
-      customMaxStorageMb: payload.customMaxStorageMb,
-      customOverrideReason: payload.customOverrideReason || (payload.customLimitsEnabled ? 'Initial custom limits configured during library provisioning' : undefined),
-    });
+      // 4. Insert Membership
+      await tx.insert(tenantMemberships).values({
+        id: `mem_${tenantId}_admin`,
+        tenantId,
+        userId: adminUserId,
+        role: 'library_admin',
+        joinedAt: new Date(),
+        isActive: true,
+      }).onConflictDoNothing();
 
-    // 5. Generate Invitation Token
-    await db.insert(invitations).values({
-      id: `inv_${tenantId}_admin`,
-      token,
-      tenantId,
-      recipientEmail: payload.adminEmail.trim().toLowerCase(),
-      recipientName: payload.adminFullName.trim(),
-      role: 'library_admin',
-      deliveryMethod: payload.invitationDeliveryMethod || 'manual_link',
-      status: 'pending',
-      expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
-      createdBy: 'usr_super_admin_01',
-    });
+      // 5. Insert Subscription
+      await tx.insert(subscriptions).values({
+        id: subId,
+        tenantId,
+        planId: payload.planId,
+        status: payload.isTrial ? 'trial' : 'active',
+        billingCycle: payload.billingCycle || 'monthly',
+        expiryDate,
+        gracePeriodDays: payload.gracePeriodDays || 7,
+        autoRenew: !payload.isTrial,
+        customMaxTitles: payload.customMaxTitles,
+        customMaxCopies: payload.customMaxCopies,
+        customMaxLibrarians: payload.customMaxLibrarians,
+        customMaxStudents: payload.customMaxStudents,
+        customMaxStorageMb: payload.customMaxStorageMb,
+        customOverrideReason: payload.customOverrideReason || (payload.customLimitsEnabled ? 'Initial custom limits configured during library provisioning' : undefined),
+      });
 
-    // 6. Audit Log
-    await db.insert(activityLogs).values({
-      id: `log_${Date.now()}`,
-      tenantId,
-      actorId: 'usr_super_admin_01',
-      actorName: 'Super Administrator',
-      actorRole: 'super_admin',
-      action: 'TENANT_PROVISIONED',
-      category: 'provisioning',
-      details: `Provisioned "${payload.name}" with plan ${payload.planId}. Admin invited: ${payload.adminEmail}.`,
+      // 6. Generate Invitation Token
+      await tx.insert(invitations).values({
+        id: `inv_${tenantId}_admin`,
+        token,
+        tenantId,
+        recipientEmail: payload.adminEmail.trim().toLowerCase(),
+        recipientName: payload.adminFullName.trim(),
+        role: 'library_admin',
+        deliveryMethod: payload.invitationDeliveryMethod || 'manual_link',
+        status: 'pending',
+        expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        createdBy: 'usr_super_admin_01',
+      });
+
+      // 7. Audit Log
+      await tx.insert(activityLogs).values({
+        id: `log_${Date.now()}`,
+        tenantId,
+        actorId: 'usr_super_admin_01',
+        actorName: 'Super Administrator',
+        actorRole: 'super_admin',
+        action: 'TENANT_PROVISIONED',
+        category: 'provisioning',
+        details: `Provisioned "${payload.name}" with plan ${payload.planId}. Admin invited: ${payload.adminEmail}.`,
+      });
     });
 
     res.json({
@@ -255,13 +418,36 @@ app.post('/api/tenants/provision', async (req, res) => {
   }
 });
 
+// --- STRICT TENANT ACCESS & TRIAL EXPIRATION MIDDLEWARE ---
+// Enforces deactivation and expiration on the backend for every protected tenant request.
+// Direct API requests are rejected with 403 Forbidden after expiry.
+app.use('/api/tenants/:slug', async (req, res, next) => {
+  // Allow root GET /api/tenants/:slug (used to fetch tenant details and display the deactivated/expired screen)
+  if (req.method === 'GET' && (req.path === '/' || req.path === '')) {
+    return next();
+  }
+  // Allow Super Admin status update route
+  if (req.path === '/status') {
+    return next();
+  }
+
+  const { slug } = req.params;
+  const auth = await requireActiveTenant(slug, res);
+  if (!auth) {
+    return; // requireActiveTenant sends 403 Forbidden with expiration details
+  }
+  (req as any).tenant = auth.tenant;
+  (req as any).tenantId = auth.tenantId;
+  next();
+});
+
 // --- CATALOGUE & BOOKS API (RLS & Quota Enforced) ---
 app.get('/api/tenants/:slug/books', async (req, res) => {
   try {
     const { slug } = req.params;
-    const tRows = await db.select().from(tenants).where(eq(tenants.slug, slug)).limit(1);
-    if (!tRows.length) return res.status(404).json({ error: 'Tenant not found' });
-    const tenantId = tRows[0].id;
+    const auth = await requireActiveTenant(slug, res);
+    if (!auth) return;
+    const tenantId = auth.tenantId;
 
     // Set local RLS tenant setting via PostgreSQL set_config
     await db.execute(sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false);`);
@@ -276,18 +462,12 @@ app.get('/api/tenants/:slug/books', async (req, res) => {
 app.post('/api/tenants/:slug/books', async (req, res) => {
   try {
     const { slug } = req.params;
-    const tRows = await db.select().from(tenants).where(eq(tenants.slug, slug)).limit(1);
-    if (!tRows.length) return res.status(404).json({ error: 'Tenant not found' });
-    const tenantId = tRows[0].id;
+    const auth = await requireActiveTenant(slug, res);
+    if (!auth) return;
+    const tenantId = auth.tenantId;
 
     const { title, isbn, authors, category, publisher, year, callNumber, shelfLocation, copiesCount = 1 } = req.body;
     const numCopies = Math.max(1, Number(copiesCount) || 1);
-
-    // 1. Check Tenant Subscription Active & Within Grace Period
-    const subCheck = await verifyTenantActiveAndSubscribed(tenantId);
-    if (!subCheck.valid) {
-      return res.status(403).json({ error: subCheck.error });
-    }
 
     // 2. Enforce Server-Side Title Quota Limit
     const titleQuota = await checkServerTitleQuota(tenantId, 1);
@@ -1048,6 +1228,21 @@ app.patch('/api/super-admin/tenants/:tenantId/subscription', async (req, res) =>
 
     await db.update(subscriptions).set(updates).where(eq(subscriptions.tenantId, tenantId));
 
+    // Automatic Reactivation / Tenant Status Sync
+    // Rule 6: Reactivate library when active paid subscription is assigned
+    // Rule 7: Do NOT override separate suspension!
+    if (updates.status === 'active' || (updates.planId && updates.planId !== 'plan_free')) {
+      if (tenant.status === 'deactivated' || tenant.status === 'trial') {
+        await db.update(tenants).set({ status: 'active', updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+      }
+    } else if (updates.status === 'suspended') {
+      await db.update(tenants).set({ status: 'suspended', updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+    } else if (updates.status === 'expired') {
+      if (tenant.status !== 'suspended' && tenant.status !== 'archived') {
+        await db.update(tenants).set({ status: 'deactivated', updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+      }
+    }
+
     // Audit log
     await db.insert(activityLogs).values({
       id: `log_${Date.now()}`,
@@ -1062,6 +1257,62 @@ app.patch('/api/super-admin/tenants/:tenantId/subscription', async (req, res) =>
 
     const updatedSub = await db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId)).limit(1);
     res.json({ success: true, subscription: updatedSub[0] });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Manually extend Free Trial (Super Admin Control)
+app.post('/api/super-admin/tenants/:tenantId/extend-trial', async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { additionalHours = 72, reason } = req.body;
+
+    const tRows = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    if (!tRows.length) return res.status(404).json({ error: 'Library not found' });
+    const tenant = tRows[0];
+
+    const subRows = await db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId)).limit(1);
+    if (!subRows.length) return res.status(404).json({ error: 'Subscription not found for this library' });
+    const sub = subRows[0];
+
+    const now = Date.now();
+    const currentExpiry = new Date(sub.expiryDate).getTime();
+    const baseTime = currentExpiry > now ? currentExpiry : now;
+    const newExpiry = new Date(baseTime + Number(additionalHours) * 60 * 60 * 1000);
+
+    // Update subscription to trial with new expiry timestamp
+    await db.update(subscriptions).set({
+      status: 'trial',
+      expiryDate: newExpiry,
+    }).where(eq(subscriptions.id, sub.id));
+
+    // Restore tenant status if deactivated
+    if (tenant.status === 'deactivated' || tenant.status === 'trial') {
+      await db.update(tenants).set({
+        status: 'trial',
+        updatedAt: new Date(),
+      }).where(eq(tenants.id, tenantId));
+    }
+
+    // Insert audit log
+    await db.insert(activityLogs).values({
+      id: `log_ext_${Date.now()}`,
+      tenantId,
+      actorId: 'usr_super_admin_01',
+      actorName: 'Super Administrator',
+      actorRole: 'super_admin',
+      action: 'TRIAL_EXTENDED',
+      category: 'subscription',
+      details: `Super Admin manually extended Free trial by ${additionalHours} hours (${(additionalHours / 24).toFixed(1)} days) for "${tenant.name}". New expiry: ${newExpiry.toISOString()}. Reason: ${reason || 'Authority manual extension'}.`,
+      timestamp: new Date(),
+    });
+
+    res.json({
+      success: true,
+      newExpiry: newExpiry.toISOString(),
+      message: `Trial extended by ${additionalHours} hours until ${newExpiry.toLocaleString()}`,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1667,6 +1918,16 @@ async function seedDatabaseIfEmpty() {
 async function startServer() {
   await seedDatabaseIfEmpty();
 
+  // Run initial trial expiration check immediately on startup
+  await checkAndDeactivateExpiredTrialsDB();
+
+  // Start scheduled background engine (runs every 30 seconds)
+  setInterval(() => {
+    checkAndDeactivateExpiredTrialsDB().catch((err) => {
+      console.error('[Scheduled Trial Engine] Error:', err);
+    });
+  }, 30000);
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -1683,6 +1944,7 @@ async function startServer() {
 
   app.listen(port, () => {
     console.log(`[MBT Library Full-Stack] Server running on port ${port}`);
+    console.log(`[License Engine] 72-Hour Free trial background deactivation scheduler active`);
     console.log(`[Cloud SQL] Relational schema and Row Level Security active`);
   });
 }

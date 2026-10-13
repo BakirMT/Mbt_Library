@@ -147,15 +147,15 @@ export const SubscriptionPlansManager: React.FC = () => {
         </div>
         <button
           onClick={handleOpenCreate}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+          className="w-full sm:w-auto px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer shrink-0 transition-colors"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 shrink-0" />
           <span>Create New Plan</span>
         </button>
       </div>
 
       {/* Plan Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {plans.map((plan) => (
           <div
             key={plan.id}
@@ -260,23 +260,24 @@ export const SubscriptionPlansManager: React.FC = () => {
       {(editingPlan || isCreatingNew) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8 animate-in fade-in duration-150">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+            <div className="bg-slate-900 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between">
               <h3 className="font-bold text-sm">
                 {isCreatingNew ? 'Create New Subscription Plan' : `Edit Plan: ${editingPlan?.name}`}
               </h3>
               <button
+                type="button"
                 onClick={() => {
                   setEditingPlan(null);
                   setIsCreatingNew(false);
                 }}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white p-1"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
-              <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Plan Name *</label>
                   <input
@@ -302,7 +303,7 @@ export const SubscriptionPlansManager: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block font-semibold text-slate-700 mb-1">Description</label>
                   <input
                     type="text"

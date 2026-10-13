@@ -108,7 +108,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ tenant }) => {
         throw new Error(data.error || 'Server rejected renewal request.');
       }
 
-      const res = saasStorage.renewBookLoan(loanId, tenant.settings.defaultLoanPeriodDays || 14);
+      const res = saasStorage.renewBookLoan(loanId, tenant.settings.defaultLoanPeriodDays || 7);
       if (res.success && res.loan) {
         setFeedbackType('success');
         setReservationFeedback(`Renewed "${title}"! New due date: ${new Date(res.loan.dueDate).toLocaleDateString()}`);

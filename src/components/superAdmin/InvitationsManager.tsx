@@ -40,11 +40,15 @@ export const InvitationsManager: React.FC = () => {
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [revokeConfirmId, setRevokeConfirmId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleRevoke = async (invitationId: string) => {
-    const conf = window.confirm('Are you sure you want to revoke this invitation token? The user will no longer be able to activate an account.');
-    if (!conf) return;
-
     try {
       // 1. Post revocation to real Cloud SQL backend
       const res = await fetch(`/api/invitations/${encodeURIComponent(invitationId)}/revoke`, {
@@ -58,8 +62,11 @@ export const InvitationsManager: React.FC = () => {
       // 2. Sync to local state
       saasStorage.revokeInvitation(invitationId);
       refreshInvitations();
+      showToast('Invitation token revoked successfully.');
     } catch (err: any) {
-      alert(`Failed to revoke token: ${err.message}`);
+      showToast(`Revocation error: ${err.message}`);
+    } finally {
+      setRevokeConfirmId(null);
     }
   };
 
@@ -132,8 +139,8 @@ export const InvitationsManager: React.FC = () => {
           <span className="text-xs text-slate-400">Tokens expire automatically after 7 days</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full text-left text-xs min-w-[700px]">
             <thead className="bg-slate-50/70 text-slate-500 border-b border-slate-200">
               <tr>
                 <th className="px-5 py-3 font-semibold">Recipient</th>
@@ -188,32 +195,56 @@ export const InvitationsManager: React.FC = () => {
                     <td className="px-5 py-3.5 text-slate-500">
                       {new Date(inv.expiresAt).toLocaleDateString()}
                     </td>
-                    <td className="px-5 py-3.5 text-right space-x-1.5 whitespace-nowrap">
-                      <button
-                        onClick={() => handleCopy(inv.token)}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold cursor-pointer inline-flex items-center space-x-1"
-                      >
-                        {copiedToken === inv.token ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span>Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Copy Link</span>
-                          </>
-                        )}
-                      </button>
-
-                      {inv.status === 'pending' && (
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => handleRevoke(inv.id)}
-                          className="px-2 py-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded text-xs font-medium cursor-pointer"
+                          type="button"
+                          onClick={() => handleCopy(inv.token)}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold cursor-pointer inline-flex items-center space-x-1"
                         >
-                          Revoke
+                          {copiedToken === inv.token ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span>Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 shrink-0" />
+                              <span>Copy Link</span>
+                            </>
+                          )}
                         </button>
-                      )}
+
+                        {inv.status === 'pending' && (
+                          revokeConfirmId === inv.id ? (
+                            <div className="inline-flex items-center space-x-1 bg-rose-50 p-1 rounded border border-rose-200">
+                              <span className="text-[10px] text-rose-700 font-semibold px-1">Revoke?</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRevoke(inv.id)}
+                                className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRevokeConfirmId(null)}
+                                className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-semibold cursor-pointer"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setRevokeConfirmId(inv.id)}
+                              className="px-2 py-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded text-xs font-medium cursor-pointer"
+                            >
+                              Revoke
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -322,6 +353,13 @@ export const InvitationsManager: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center space-x-2 px-4 py-3 bg-slate-900 text-white rounded-xl shadow-lg border border-slate-700 text-xs font-medium animate-in slide-in-from-bottom-2">
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toast}</span>
         </div>
       )}
     </div>

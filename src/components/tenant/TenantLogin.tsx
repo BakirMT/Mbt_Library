@@ -41,6 +41,7 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
   const [password, setPassword] = useState('Password123!');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showForgotTip, setShowForgotTip] = useState(false);
 
   const brandColor = tenant.settings.primaryColor || '#2563eb';
 
@@ -167,16 +168,17 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
                   <label className="font-semibold text-slate-700">Account Password</label>
                   <button
                     type="button"
-                    onClick={() =>
-                      alert(
-                        `Password reset for this tenant is initiated by the Library Admin or Super Admin via secure invitation tokens. Default test password: Password123!`
-                      )
-                    }
-                    className="text-[11px] text-blue-600 hover:text-blue-800"
+                    onClick={() => setShowForgotTip((prev) => !prev)}
+                    className="text-[11px] text-blue-600 hover:text-blue-800 cursor-pointer"
                   >
                     Forgot password?
                   </button>
                 </div>
+                {showForgotTip && (
+                  <div className="mb-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-[11px] leading-relaxed">
+                    Password reset for this tenant is initiated by the Library Admin or Super Admin via secure invitation tokens. Default test credentials use <strong>Password123!</strong>
+                  </div>
+                )}
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input

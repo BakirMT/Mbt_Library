@@ -17,6 +17,12 @@ export async function verifyTenantActiveAndSubscribed(tenantId: string): Promise
       return { valid: false, error: 'Tenant library not found.' };
     }
     const tenant = tenantRows[0];
+    if (tenant.status === 'deactivated') {
+      return {
+        valid: false,
+        error: `Library "${tenant.name}" has been deactivated due to Free trial expiration. Please upgrade subscription or contact the MBT Library authority to restore access.`,
+      };
+    }
     if (tenant.status === 'suspended') {
       return { valid: false, error: `Library "${tenant.name}" is suspended. Feature write operations are disabled.` };
     }
@@ -30,12 +36,37 @@ export async function verifyTenantActiveAndSubscribed(tenantId: string): Promise
     }
     const sub = subRows[0];
 
-    // Check expiry + grace period
-    const now = new Date().getTime();
-    const expiry = new Date(sub.expiryDate).getTime();
-    const graceMs = (sub.gracePeriodDays || 7) * 24 * 60 * 60 * 1000;
+    // Check expiry
+    const now = new Date();
+    const expiry = new Date(sub.expiryDate);
 
-    if (now > expiry + graceMs && sub.status === 'suspended') {
+    // If sub is marked expired, block immediately and ensure tenant status is deactivated
+    if (sub.status === 'expired') {
+      if (tenant.status !== 'suspended' && tenant.status !== 'archived' && tenant.status !== 'deactivated') {
+        await db.update(tenants).set({ status: 'deactivated', updatedAt: now }).where(eq(tenants.id, tenant.id));
+      }
+      return {
+        valid: false,
+        error: `The 3-day Free trial for "${tenant.name}" has expired and library access is deactivated. Please upgrade to continue.`,
+      };
+    }
+
+    // Real-time check if Free/trial has expired
+    if (now.getTime() >= expiry.getTime() && (sub.status === 'trial' || sub.planId === 'plan_free' || sub.planId === 'plan_trial')) {
+      // Auto-deactivate immediately in DB
+      await db.update(subscriptions).set({ status: 'expired' }).where(eq(subscriptions.id, sub.id));
+      if (tenant.status !== 'suspended' && tenant.status !== 'archived') {
+        await db.update(tenants).set({ status: 'deactivated', updatedAt: now }).where(eq(tenants.id, tenant.id));
+      }
+      return {
+        valid: false,
+        error: `The 3-day Free trial for "${tenant.name}" has expired and library access is deactivated. Please upgrade to continue.`,
+      };
+    }
+
+    // For paid subscriptions with grace period
+    const graceMs = (sub.gracePeriodDays || 0) * 24 * 60 * 60 * 1000;
+    if (now.getTime() > expiry.getTime() + graceMs && sub.status === 'past_due') {
       return {
         valid: false,
         error: `Subscription grace period has expired for "${tenant.name}". Please renew subscription to continue cataloguing and circulation.`,
@@ -45,7 +76,7 @@ export async function verifyTenantActiveAndSubscribed(tenantId: string): Promise
     return { valid: true };
   } catch (err: any) {
     console.error('Error verifying tenant subscription:', err);
-    return { valid: true }; // Fallback to avoid complete blocking on transient DB errors
+    return { valid: false, error: err?.message || 'Database error validating tenant status' };
   }
 }
 

@@ -3,6 +3,14 @@ import { User, Tenant, TenantSession, UserRole } from '../types/saas';
 import { saasStorage } from '../services/storage';
 
 export type RouteType = 
+  | 'home'
+  | 'plans'
+  | 'features'
+  | 'contact'
+  | 'login'
+  | 'register'
+  | 'verify'
+  | 'checkout'
   | 'super_admin'
   | 'super_admin_login'
   | 'tenant_landing'
@@ -50,6 +58,31 @@ function parsePath(pathname: string, search: string): ParsedRoute {
   const urlParams = new URLSearchParams(search);
   const tab = urlParams.get('tab') || undefined;
   const subTab = urlParams.get('subTab') || undefined;
+
+  if (cleanPath === '/' || cleanPath === '/home') {
+    return { type: 'home', path: cleanPath };
+  }
+  if (cleanPath === '/plans') {
+    return { type: 'plans', path: cleanPath };
+  }
+  if (cleanPath === '/features') {
+    return { type: 'features', path: cleanPath };
+  }
+  if (cleanPath === '/contact') {
+    return { type: 'contact', path: cleanPath };
+  }
+  if (cleanPath === '/auth/login' || cleanPath === '/login') {
+    return { type: 'login', path: cleanPath };
+  }
+  if (cleanPath === '/auth/register' || cleanPath === '/register') {
+    return { type: 'register', path: cleanPath };
+  }
+  if (cleanPath === '/auth/verify' || cleanPath === '/verify') {
+    return { type: 'verify', path: cleanPath };
+  }
+  if (cleanPath === '/subscription/checkout' || cleanPath === '/checkout') {
+    return { type: 'checkout', path: cleanPath };
+  }
 
   // 1. Super Admin Portal
   if (cleanPath === '/super-admin' || cleanPath.startsWith('/super-admin/')) {
@@ -110,15 +143,6 @@ function parsePath(pathname: string, search: string): ParsedRoute {
       type: 'tenant_landing',
       path: cleanPath,
       tenantSlug: slug,
-    };
-  }
-
-  // Default root: redirect to super-admin
-  if (cleanPath === '/' || cleanPath === '') {
-    return {
-      type: 'super_admin',
-      path: '/super-admin',
-      tab: tab || 'overview',
     };
   }
 
