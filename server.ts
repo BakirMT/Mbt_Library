@@ -1764,11 +1764,58 @@ app.post('/api/invitations', async (req, res) => {
   }
 });
 
+// Get All Issued Invitations (Tokens)
+app.get('/api/invitations', async (_req, res) => {
+  try {
+    const allTokens = await db
+      .select({
+        id: invitations.id,
+        token: invitations.token,
+        tenantId: invitations.tenantId,
+        recipientEmail: invitations.recipientEmail,
+        recipientName: invitations.recipientName,
+        role: invitations.role,
+        deliveryMethod: invitations.deliveryMethod,
+        status: invitations.status,
+        expiresAt: invitations.expiresAt,
+        createdAt: invitations.createdAt,
+        acceptedAt: invitations.acceptedAt,
+        createdBy: invitations.createdBy,
+        tenantName: tenants.name,
+        tenantSlug: tenants.slug,
+      })
+      .from(invitations)
+      .leftJoin(tenants, eq(invitations.tenantId, tenants.id))
+      .orderBy(desc(invitations.createdAt));
+
+    res.json(allTokens);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Revoke Invitation
 app.post('/api/invitations/:invitationId/revoke', async (req, res) => {
   try {
     const { invitationId } = req.params;
+    const inv = await db.select().from(invitations).where(eq(invitations.id, invitationId)).limit(1);
+    if (!inv.length) return res.status(404).json({ error: 'Invitation not found.' });
+
     await db.update(invitations).set({ status: 'revoked' }).where(eq(invitations.id, invitationId));
+
+    // Audit log
+    await db.insert(activityLogs).values({
+      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      tenantId: inv[0].tenantId,
+      actorId: 'usr_super_admin_01',
+      actorName: 'Super Administrator',
+      actorRole: 'super_admin',
+      action: 'INVITATION_REVOKED',
+      category: 'security',
+      details: `Revoked security access token for "${inv[0].recipientName}" (${inv[0].recipientEmail}).`,
+      timestamp: new Date(),
+    });
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1778,8 +1825,92 @@ app.post('/api/invitations/:invitationId/revoke', async (req, res) => {
 // --- INVOICES & PAYMENTS API ---
 app.get('/api/invoices', async (_req, res) => {
   try {
-    const allInvoices = await db.select().from(invoices).orderBy(desc(invoices.issueDate));
+    const allInvoices = await db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        tenantId: invoices.tenantId,
+        planName: invoices.planName,
+        billingCycle: invoices.billingCycle,
+        amount: invoices.amount,
+        currency: invoices.currency,
+        status: invoices.status,
+        issueDate: invoices.issueDate,
+        dueDate: invoices.dueDate,
+        paidAt: invoices.paidAt,
+        paymentMethod: invoices.paymentMethod,
+        transactionReference: invoices.transactionReference,
+        notes: invoices.notes,
+        tenantName: tenants.name,
+        tenantSlug: tenants.slug,
+      })
+      .from(invoices)
+      .leftJoin(tenants, eq(invoices.tenantId, tenants.id))
+      .orderBy(desc(invoices.issueDate));
     res.json(allInvoices);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create / Issue New Institutional Invoice
+app.post('/api/invoices', async (req, res) => {
+  try {
+    const { tenantId, planName, billingCycle = 'annual', amount, currency = 'INR', dueDate, notes } = req.body;
+    if (!tenantId || !amount || !dueDate) {
+      return res.status(400).json({ error: 'Missing required invoice fields (tenantId, amount, dueDate).' });
+    }
+
+    const tRows = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    if (!tRows.length) return res.status(404).json({ error: 'Library tenant not found.' });
+
+    const id = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const invoiceNumber = `INV-MBT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    await db.insert(invoices).values({
+      id,
+      invoiceNumber,
+      tenantId,
+      planName: planName || 'Institutional License',
+      billingCycle,
+      amount: Number(amount),
+      currency: currency || 'INR',
+      status: 'pending',
+      issueDate: new Date(),
+      dueDate: new Date(dueDate),
+      notes: notes || '',
+    });
+
+    // Also log activity
+    await db.insert(activityLogs).values({
+      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      tenantId,
+      actorId: 'usr_super_admin_01',
+      actorName: 'Super Administrator',
+      actorRole: 'super_admin',
+      action: 'INVOICE_GENERATED',
+      category: 'subscription',
+      details: `Generated new platform invoice ${invoiceNumber} (₹${Number(amount).toLocaleString('en-IN')}) for "${tRows[0].name}".`,
+      timestamp: new Date(),
+    });
+
+    res.json({
+      success: true,
+      invoice: {
+        id,
+        invoiceNumber,
+        tenantId,
+        tenantName: tRows[0].name,
+        planName: planName || 'Institutional License',
+        billingCycle,
+        amount: Number(amount),
+        currency,
+        status: 'pending',
+        issueDate: new Date().toISOString(),
+        dueDate: new Date(dueDate).toISOString(),
+        notes,
+      },
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1795,13 +1926,15 @@ app.post('/api/invoices/:invoiceId/pay', async (req, res) => {
     if (!invRows.length) return res.status(404).json({ error: 'Invoice not found.' });
     const inv = invRows[0];
 
+    const ref = transactionReference || `TXN-${Date.now()}`;
+
     await db
       .update(invoices)
       .set({
         status: 'paid',
         paidAt: now,
         paymentMethod,
-        transactionReference: transactionReference || `TXN-${Date.now()}`,
+        transactionReference: ref,
         notes: notes || inv.notes,
       })
       .where(eq(invoices.id, invoiceId));
@@ -1815,7 +1948,120 @@ app.post('/api/invoices/:invoiceId/pay', async (req, res) => {
       })
       .where(eq(subscriptions.tenantId, inv.tenantId));
 
-    res.json({ success: true, paidAt: now });
+    // Audit log
+    const tRows = await db.select().from(tenants).where(eq(tenants.id, inv.tenantId)).limit(1);
+    const tenantName = tRows[0]?.name || inv.tenantId;
+
+    await db.insert(activityLogs).values({
+      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      tenantId: inv.tenantId,
+      actorId: 'usr_super_admin_01',
+      actorName: 'Super Administrator',
+      actorRole: 'super_admin',
+      action: 'PAYMENT_RECORDED',
+      category: 'subscription',
+      details: `Recorded institutional payment of ₹${inv.amount.toLocaleString('en-IN')} for invoice ${inv.invoiceNumber} (${tenantName}) via ${paymentMethod}.`,
+      timestamp: now,
+    });
+
+    res.json({ success: true, paidAt: now, transactionReference: ref });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- PLATFORM ACTIVITY & SECURITY AUDIT TRAIL API ---
+app.get('/api/activity-logs', async (req, res) => {
+  try {
+    const { category, tenantId, limit = '150' } = req.query;
+    const logsList = await db
+      .select({
+        id: activityLogs.id,
+        tenantId: activityLogs.tenantId,
+        actorId: activityLogs.actorId,
+        actorName: activityLogs.actorName,
+        actorRole: activityLogs.actorRole,
+        action: activityLogs.action,
+        category: activityLogs.category,
+        details: activityLogs.details,
+        timestamp: activityLogs.timestamp,
+        tenantName: tenants.name,
+      })
+      .from(activityLogs)
+      .leftJoin(tenants, eq(activityLogs.tenantId, tenants.id))
+      .orderBy(desc(activityLogs.timestamp))
+      .limit(Number(limit) || 150);
+
+    res.json(logsList);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/activity-logs', async (req, res) => {
+  try {
+    const { tenantId, actorId, actorName, actorRole, action, category, details } = req.body;
+    const id = `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    await db.insert(activityLogs).values({
+      id,
+      tenantId: tenantId || null,
+      actorId: actorId || 'usr_super_admin_01',
+      actorName: actorName || 'Super Administrator',
+      actorRole: actorRole || 'super_admin',
+      action: action || 'PLATFORM_ACTION',
+      category: category || 'general',
+      details: details || '',
+      timestamp: new Date(),
+    });
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- SUBSCRIPTION REVENUE & ANALYTICS API ---
+app.get('/api/super-admin/revenue', async (_req, res) => {
+  try {
+    const allInvoices = await db.select().from(invoices);
+    const allSubs = await db.select().from(subscriptions);
+    const allPlans = await db.select().from(subscriptionPlans);
+
+    const paidInvoices = allInvoices.filter((i) => i.status === 'paid');
+    const pendingInvoices = allInvoices.filter((i) => i.status === 'pending');
+    const overdueInvoices = allInvoices.filter((i) => i.status === 'overdue');
+
+    const totalCollected = paidInvoices.reduce((sum, i) => sum + i.amount, 0);
+    const totalPending = pendingInvoices.reduce((sum, i) => sum + i.amount, 0);
+    const totalOverdue = overdueInvoices.reduce((sum, i) => sum + i.amount, 0);
+
+    let mrr = 0;
+    const tierBreakdown: Record<string, { count: number; totalAmount: number; planName: string }> = {};
+
+    allSubs.forEach((sub) => {
+      const plan = allPlans.find((p) => p.id === sub.planId);
+      if (plan && sub.status === 'active') {
+        const monthlyVal = sub.billingCycle === 'annual' ? Math.round(plan.priceAnnual / 12) : plan.priceMonthly;
+        mrr += monthlyVal;
+
+        if (!tierBreakdown[plan.code]) {
+          tierBreakdown[plan.code] = { count: 0, totalAmount: 0, planName: plan.name };
+        }
+        tierBreakdown[plan.code].count += 1;
+        tierBreakdown[plan.code].totalAmount += sub.billingCycle === 'annual' ? plan.priceAnnual : plan.priceMonthly * 12;
+      }
+    });
+
+    res.json({
+      totalCollected,
+      totalPending,
+      totalOverdue,
+      mrr,
+      tierBreakdown,
+      invoicesCount: allInvoices.length,
+      paidCount: paidInvoices.length,
+      pendingCount: pendingInvoices.length,
+      overdueCount: overdueInvoices.length,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -2137,6 +2383,87 @@ async function seedDatabaseIfEmpty() {
         }
 
         await db.insert(subscriptionEnquiries).values(seedItems).onConflictDoNothing({ target: subscriptionEnquiries.id });
+      }
+    }
+
+    // 9. Invoices & Billing
+    const invRows = await db.select().from(invoices).limit(1);
+    if (!invRows.length) {
+      const allT = await db.select().from(tenants);
+      const apex = allT.find((t) => t.id === 'ten_apex_college') || allT[0];
+      const second = allT.find((t) => t.id === 'ten_darul_irfan') || allT[1] || allT[0];
+      const third = allT.find((t) => t.id === 'ten_zaytuna') || allT[2] || allT[0];
+
+      const seedInvoices: any[] = [];
+      if (second) {
+        seedInvoices.push({
+          id: 'inv_seed_001',
+          invoiceNumber: 'INV-MBT-2026-0038',
+          tenantId: second.id,
+          planName: 'Standard Campus',
+          billingCycle: 'annual',
+          amount: 49990,
+          currency: 'INR',
+          status: 'paid',
+          issueDate: new Date(Date.now() - 30 * 24 * 3600 * 1000),
+          dueDate: new Date(Date.now() - 15 * 24 * 3600 * 1000),
+          paidAt: new Date(Date.now() - 29 * 24 * 3600 * 1000),
+          paymentMethod: 'Credit Card / Razorpay',
+          transactionReference: 'pay_3N8xYk2eZvKYlo2C19',
+          notes: 'Annual institutional license renewal.',
+        });
+      }
+      if (third) {
+        seedInvoices.push({
+          id: 'inv_seed_002',
+          invoiceNumber: 'INV-MBT-2026-0041',
+          tenantId: third.id,
+          planName: 'Premium University',
+          billingCycle: 'annual',
+          amount: 19990,
+          currency: 'INR',
+          status: 'paid',
+          issueDate: new Date(Date.now() - 20 * 24 * 3600 * 1000),
+          dueDate: new Date(Date.now() - 5 * 24 * 3600 * 1000),
+          paidAt: new Date(Date.now() - 19 * 24 * 3600 * 1000),
+          paymentMethod: 'Bank Wire / UPI',
+          transactionReference: 'UPI-METRO-9982104',
+          notes: 'Higher research license tier.',
+        });
+      }
+      if (apex) {
+        seedInvoices.push({
+          id: 'inv_seed_003',
+          invoiceNumber: 'INV-MBT-2026-0052',
+          tenantId: apex.id,
+          planName: 'Standard Campus',
+          billingCycle: 'annual',
+          amount: 49990,
+          currency: 'INR',
+          status: 'pending',
+          issueDate: new Date(Date.now() - 5 * 24 * 3600 * 1000),
+          dueDate: new Date(Date.now() + 10 * 24 * 3600 * 1000),
+          notes: 'Upcoming renewal invoice sent to institutional administration.',
+        });
+      }
+      if (allT.length > 3) {
+        seedInvoices.push({
+          id: 'inv_seed_004',
+          invoiceNumber: 'INV-MBT-2026-0049',
+          tenantId: allT[3].id,
+          planName: 'Basic School',
+          billingCycle: 'monthly',
+          amount: 1999,
+          currency: 'INR',
+          status: 'overdue',
+          issueDate: new Date(Date.now() - 25 * 24 * 3600 * 1000),
+          dueDate: new Date(Date.now() - 5 * 24 * 3600 * 1000),
+          notes: 'Past due monthly invoice awaiting clearance.',
+        });
+      }
+
+      if (seedInvoices.length) {
+        await db.insert(invoices).values(seedInvoices).onConflictDoNothing({ target: invoices.id });
       }
     }
   } catch (err: any) {

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { saasStorage } from '../../services/storage';
 import { useRouter } from '../../router/RouterContext';
-import { SubscriptionEnquiry } from '../../types/saas';
+import { SubscriptionEnquiry, Invoice } from '../../types/saas';
 
 interface DashboardOverviewProps {
   onOpenProvisionModal: () => void;
@@ -35,22 +35,34 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const { navigate } = useRouter();
   const [reminderStatus, setReminderStatus] = useState<Record<string, string>>({});
   const [enquiries, setEnquiries] = useState<SubscriptionEnquiry[]>(() => saasStorage.getSubscriptionEnquiries());
+  const [invoices, setInvoices] = useState<Invoice[]>(() => saasStorage.getInvoices());
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   React.useEffect(() => {
-    const handleUpdate = () => {
+    const handleEnquiriesUpdate = () => {
       setEnquiries(saasStorage.getSubscriptionEnquiries());
     };
-    window.addEventListener('mbt_enquiries_updated', handleUpdate);
+    const handleInvoicesUpdate = () => {
+      setInvoices(saasStorage.getInvoices());
+    };
+
+    window.addEventListener('mbt_enquiries_updated', handleEnquiriesUpdate);
+    window.addEventListener('mbt_invoices_updated', handleInvoicesUpdate);
 
     saasStorage
       .syncSubscriptionEnquiriesFromApi()
-      .then((list) => {
-        setEnquiries(list);
-      })
+      .then((list) => setEnquiries(list))
       .catch(() => {});
 
-    return () => window.removeEventListener('mbt_enquiries_updated', handleUpdate);
+    saasStorage
+      .syncInvoicesFromApi()
+      .then((invList) => setInvoices(invList))
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener('mbt_enquiries_updated', handleEnquiriesUpdate);
+      window.removeEventListener('mbt_invoices_updated', handleInvoicesUpdate);
+    };
   }, []);
 
   const pendingEnquiries = enquiries.filter((e) => e.status === 'pending');
@@ -68,7 +80,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   const tenants = saasStorage.getTenants();
   const subscriptions = saasStorage.getSubscriptions();
-  const invoices = saasStorage.getInvoices();
+  const plans = saasStorage.getPlans();
   const logs = saasStorage.getActivityLogs();
   const users = saasStorage.getUsers();
   const memberships = saasStorage.getMemberships();
@@ -88,14 +100,26 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const titlesTotal = tenants.reduce((acc, t) => acc + (t.currentUsage?.titlesCount || 0), 0);
   const copiesTotal = tenants.reduce((acc, t) => acc + (t.currentUsage?.copiesCount || 0), 0);
 
-  // Revenue calculation
+  // Revenue calculation from live invoices
   const totalRevenue = invoices
     .filter((inv) => inv.status === 'paid')
     .reduce((acc, inv) => acc + inv.amount, 0);
 
   const pendingRevenue = invoices
-    .filter((inv) => inv.status === 'pending' || inv.status === 'overdue')
+    .filter((inv) => inv.status === 'pending')
     .reduce((acc, inv) => acc + inv.amount, 0);
+
+  const overdueRevenue = invoices
+    .filter((inv) => inv.status === 'overdue')
+    .reduce((acc, inv) => acc + inv.amount, 0);
+
+  // Calculate MRR from active subscriptions
+  const calculatedMrr = subscriptions.reduce((acc, sub) => {
+    if (sub.status !== 'active') return acc;
+    const plan = plans.find((p) => p.id === sub.planId);
+    if (!plan) return acc;
+    return acc + (sub.billingCycle === 'annual' ? Math.round(plan.priceAnnual / 12) : plan.priceMonthly);
+  }, 0);
 
   // Subscriptions expiring within 14 days or currently expired
   const now = new Date().getTime();
@@ -221,19 +245,33 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <CreditCard className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline space-x-2">
-            <span className="text-2xl font-black text-slate-900">
-              ₹{totalRevenue.toLocaleString('en-IN')}
-            </span>
-            <span className="text-xs text-slate-500">collected</span>
+          <div className="mt-3 flex items-baseline justify-between">
+            <div className="flex items-baseline space-x-2">
+              <span className="text-2xl font-black text-slate-900">
+                ₹{totalRevenue.toLocaleString('en-IN')}
+              </span>
+              <span className="text-xs text-slate-500 font-medium">collected</span>
+            </div>
+            {calculatedMrr > 0 && (
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                ₹{calculatedMrr.toLocaleString('en-IN')}/mo MRR
+              </span>
+            )}
           </div>
           <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-            <span>
-              Pending: <strong className="text-amber-600">₹{pendingRevenue.toLocaleString('en-IN')}</strong>
-            </span>
+            <div className="space-x-2">
+              <span>
+                Pending: <strong className="text-amber-600">₹{pendingRevenue.toLocaleString('en-IN')}</strong>
+              </span>
+              {overdueRevenue > 0 && (
+                <span>
+                  · Overdue: <strong className="text-rose-600">₹{overdueRevenue.toLocaleString('en-IN')}</strong>
+                </span>
+              )}
+            </div>
             <button
               onClick={() => onNavigateTab('billing')}
-              className="text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+              className="text-blue-600 hover:text-blue-800 font-bold cursor-pointer transition-colors"
             >
               Invoices →
             </button>

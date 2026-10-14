@@ -22,6 +22,10 @@ import {
   Send,
   MessageSquare,
   Building2,
+  Plus,
+  Ban,
+  RefreshCw,
+  Sliders,
 } from 'lucide-react';
 import {
   Tenant,
@@ -74,6 +78,35 @@ export const SubscriptionsManagementView: React.FC = () => {
   const [reviewEnquiry, setReviewEnquiry] = useState<SubscriptionEnquiry | null>(null);
   const [enquiryNotes, setEnquiryNotes] = useState('');
   const [enquiryCommercialTerms, setEnquiryCommercialTerms] = useState('');
+  const [enqTitles, setEnqTitles] = useState<number>(5000);
+  const [enqCopies, setEnqCopies] = useState<number>(7500);
+  const [enqLibrarians, setEnqLibrarians] = useState<number>(5);
+  const [enqStudents, setEnqStudents] = useState<number>(500);
+  const [enqStorageMb, setEnqStorageMb] = useState<number>(2048);
+
+  // Additional Enquiry states
+  const [enquiryStatusFilter, setEnquiryStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [approvingEnquiryId, setApprovingEnquiryId] = useState<string | null>(null);
+  const [actionToast, setActionToast] = useState<string | null>(null);
+  const [rejectModalEnquiry, setRejectModalEnquiry] = useState<SubscriptionEnquiry | null>(null);
+  const [rejectNotes, setRejectNotes] = useState('');
+
+  // Log new inquiry modal
+  const [newEnquiryModalOpen, setNewEnquiryModalOpen] = useState(false);
+  const [newEnqTenantId, setNewEnqTenantId] = useState('');
+  const [newEnqName, setNewEnqName] = useState('');
+  const [newEnqEmail, setNewEnqEmail] = useState('');
+  const [newEnqPhone, setNewEnqPhone] = useState('');
+  const [newEnqPlan, setNewEnqPlan] = useState('premium');
+  const [newEnqTitles, setNewEnqTitles] = useState(5000);
+  const [newEnqStudents, setNewEnqStudents] = useState(500);
+  const [newEnqMessage, setNewEnqMessage] = useState('');
+  const [isSubmittingEnq, setIsSubmittingEnq] = useState(false);
+
+  const showToast = (msg: string) => {
+    setActionToast(msg);
+    setTimeout(() => setActionToast(null), 4000);
+  };
 
   useEffect(() => {
     saasStorage
@@ -229,15 +262,112 @@ export const SubscriptionsManagementView: React.FC = () => {
     setEditingTenant(null);
   };
 
-  const handleApproveEnquiryAsPremium = async (enquiry: SubscriptionEnquiry) => {
-    await saasStorage.approveSubscriptionEnquiryAsync(
-      enquiry.id,
-      enquiryNotes,
-      enquiryCommercialTerms
-    );
+  const handleQuickApprove = async (enquiry: SubscriptionEnquiry) => {
+    setApprovingEnquiryId(enquiry.id);
+    try {
+      const res = await saasStorage.approveSubscriptionEnquiryAsync(enquiry.id);
+      showToast(`Approved "${res.tenantName || enquiry.tenantName}"! Subscription active in Cloud SQL.`);
+      setRefreshNonce((n) => n + 1);
+    } catch (err: any) {
+      showToast(`Error: ${err?.message || 'Failed to approve'}`);
+    } finally {
+      setApprovingEnquiryId(null);
+    }
+  };
 
-    setReviewEnquiry(null);
-    setRefreshNonce((n) => n + 1);
+  const handleApproveEnquiryAsPremium = async (enquiry: SubscriptionEnquiry) => {
+    setApprovingEnquiryId(enquiry.id);
+    try {
+      // 1. If linked to tenant, update subscription custom limits
+      if (enquiry.tenantId) {
+        saasStorage.updateSubscription(enquiry.tenantId, {
+          customLimits: {
+            maxTitles: enqTitles,
+            maxCopies: enqCopies,
+            maxLibrarians: enqLibrarians,
+            maxStudents: enqStudents,
+            storageMb: enqStorageMb,
+          },
+          customOverrideReason: enquiryCommercialTerms || 'Custom Premium Enterprise Limits approved',
+        });
+      }
+
+      const res = await saasStorage.approveSubscriptionEnquiryAsync(
+        enquiry.id,
+        enquiryNotes,
+        enquiryCommercialTerms
+      );
+      showToast(`Approved & configured custom limits for "${res.tenantName || enquiry.tenantName}"!`);
+      setReviewEnquiry(null);
+      setRefreshNonce((n) => n + 1);
+    } catch (err: any) {
+      showToast(`Error: ${err?.message || 'Approval failed'}`);
+    } finally {
+      setApprovingEnquiryId(null);
+    }
+  };
+
+  const handleRejectEnquiry = async () => {
+    if (!rejectModalEnquiry) return;
+    try {
+      const res = await saasStorage.rejectSubscriptionEnquiryAsync(
+        rejectModalEnquiry.id,
+        rejectNotes.trim() || 'Request declined by Super Administrator.'
+      );
+      showToast(`Inquiry for "${res.tenantName || rejectModalEnquiry.tenantName}" rejected.`);
+      setRejectModalEnquiry(null);
+      setRejectNotes('');
+      setRefreshNonce((n) => n + 1);
+    } catch (err: any) {
+      showToast(`Error: ${err?.message || 'Failed to reject enquiry'}`);
+    }
+  };
+
+  const handleCreateNewEnquiry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEnqName.trim() || !newEnqEmail.trim()) {
+      showToast('Contact name and email are required.');
+      return;
+    }
+
+    setIsSubmittingEnq(true);
+    try {
+      const selectedTenant = tenants.find((t) => t.id === newEnqTenantId);
+      const res = await fetch('/api/enquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: selectedTenant?.id,
+          tenantSlug: selectedTenant?.slug,
+          tenantName: selectedTenant?.name || newEnqName.trim(),
+          contactName: newEnqName.trim(),
+          contactEmail: newEnqEmail.trim(),
+          contactPhone: newEnqPhone.trim(),
+          requestedPlan: newEnqPlan,
+          estimatedTitles: Number(newEnqTitles),
+          estimatedStudents: Number(newEnqStudents),
+          message: newEnqMessage.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to record custom enquiry');
+      }
+
+      await saasStorage.syncSubscriptionEnquiriesFromApi();
+      showToast('Custom subscription inquiry logged successfully in database.');
+      setNewEnquiryModalOpen(false);
+      setNewEnqName('');
+      setNewEnqEmail('');
+      setNewEnqPhone('');
+      setNewEnqMessage('');
+      setRefreshNonce((n) => n + 1);
+    } catch (err: any) {
+      showToast(`Error: ${err?.message || 'Failed to create inquiry'}`);
+    } finally {
+      setIsSubmittingEnq(false);
+    }
   };
 
   // Filtered rows
@@ -569,86 +699,208 @@ export const SubscriptionsManagementView: React.FC = () => {
       {activeSubTab === 'enquiries' && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
-            <h3 className="font-bold text-slate-900 text-sm">
-              Custom Premium Subscription Inquiries ({enquiries.length})
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Libraries requesting custom capacity agreements, tailored server allowances, and bespoke commercial terms.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  Custom Premium Subscription Inquiries ({enquiries.length})
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Libraries requesting custom capacity agreements, tailored server allowances, and bespoke commercial terms.
+                </p>
+              </div>
 
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    saasStorage.syncSubscriptionEnquiriesFromApi().then(() => {
+                      setRefreshNonce((n) => n + 1);
+                      showToast('Synchronized with Cloud SQL database.');
+                    });
+                  }}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1 cursor-pointer transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Sync DB</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewEnqTenantId(tenants[0]?.id || '');
+                    setNewEnquiryModalOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Log New Inquiry</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center space-x-1.5 pt-3 pb-1 overflow-x-auto scrollbar-none">
+              {(
+                [
+                  { id: 'all', label: 'All Inquiries', count: enquiries.length },
+                  { id: 'pending', label: 'Pending Review', count: enquiries.filter((e) => e.status === 'pending').length },
+                  { id: 'approved', label: 'Approved & Active', count: enquiries.filter((e) => e.status === 'approved').length },
+                  { id: 'rejected', label: 'Declined', count: enquiries.filter((e) => e.status === 'rejected').length },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setEnquiryStatusFilter(tab.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all ${
+                    enquiryStatusFilter === tab.id
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </button>
+              ))}
+            </div>
+
+            {/* Inquiries list */}
             <div className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
-              {enquiries.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-400">
-                  No subscription enquiries submitted yet.
+              {enquiries.filter((e) => enquiryStatusFilter === 'all' || e.status === enquiryStatusFilter).length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400">
+                  No subscription enquiries matching filter &quot;{enquiryStatusFilter}&quot;.
                 </div>
               ) : (
-                enquiries.map((enq) => (
-                  <div key={enq.id} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-900 text-sm">{enq.tenantName}</span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            enq.status === 'pending'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                              : enq.status === 'approved'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {enq.status}
-                        </span>
-                        {enq.requestedPlan && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 uppercase">
-                            Requested: {enq.requestedPlan}
+                enquiries
+                  .filter((e) => enquiryStatusFilter === 'all' || e.status === enquiryStatusFilter)
+                  .map((enq) => (
+                    <div key={enq.id} className="py-4.5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">{enq.tenantName}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              enq.status === 'pending'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : enq.status === 'approved'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200'
+                            }`}
+                          >
+                            {enq.status}
+                          </span>
+                          {enq.requestedPlan && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 uppercase tracking-wide">
+                              Plan: {enq.requestedPlan}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-xs text-slate-600">
+                          Authority Contact: <strong className="text-slate-800">{enq.contactName}</strong> ({enq.contactEmail}) · {enq.contactPhone || 'No phone'}
+                        </div>
+
+                        {enq.message && (
+                          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/60 text-xs text-slate-700 italic">
+                            &quot;{enq.message}&quot;
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 pt-0.5">
+                          <span>Submitted: {new Date(enq.createdAt).toLocaleDateString()}</span>
+                          {enq.estimatedTitles && <span className="font-medium text-slate-700">· {enq.estimatedTitles.toLocaleString()} Titles</span>}
+                          {enq.estimatedCopies && <span>· {enq.estimatedCopies.toLocaleString()} Copies</span>}
+                          {enq.estimatedLibrarians && <span>· {enq.estimatedLibrarians} Librarians</span>}
+                          {enq.estimatedStudents && <span className="font-medium text-slate-700">· {enq.estimatedStudents.toLocaleString()} Students</span>}
+                          {enq.estimatedStorageMb && <span>· {enq.estimatedStorageMb} MB Storage</span>}
+                        </div>
+
+                        {enq.commercialTerms && (
+                          <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded inline-block font-medium">
+                            Commercial Agreement: {enq.commercialTerms}
+                          </div>
+                        )}
+                        {enq.superAdminNotes && (
+                          <div className="text-[11px] text-slate-600 bg-slate-50 px-2.5 py-1 rounded inline-block">
+                            Admin Note: {enq.superAdminNotes}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {enq.status === 'pending' && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={approvingEnquiryId === enq.id}
+                              onClick={() => handleQuickApprove(enq)}
+                              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold text-xs rounded-lg cursor-pointer flex items-center space-x-1.5 shadow-xs transition-all active:scale-95"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{approvingEnquiryId === enq.id ? 'Approving...' : 'Quick Approve'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReviewEnquiry(enq);
+                                setEnquiryNotes(enq.superAdminNotes || '');
+                                setEnquiryCommercialTerms(enq.commercialTerms || '');
+                                setEnqTitles(enq.estimatedTitles || 5000);
+                                setEnqCopies(enq.estimatedCopies || 7500);
+                                setEnqLibrarians(enq.estimatedLibrarians || 5);
+                                setEnqStudents(enq.estimatedStudents || 500);
+                                setEnqStorageMb(enq.estimatedStorageMb || 2048);
+                              }}
+                              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer flex items-center space-x-1.5 shadow-xs"
+                            >
+                              <Sliders className="w-3.5 h-3.5" />
+                              <span>Configure Limits</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectModalEnquiry(enq);
+                                setRejectNotes('');
+                              }}
+                              className="px-3 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 text-slate-700 border border-slate-200 font-semibold text-xs rounded-lg cursor-pointer flex items-center space-x-1 transition-colors"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Decline</span>
+                            </button>
+                          </>
+                        )}
+                        {enq.status === 'approved' && (
+                          <div className="flex items-center space-x-2">
+                            <span className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-bold rounded-lg flex items-center space-x-1.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span>Approved & Quotas Live</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReviewEnquiry(enq);
+                                setEnquiryNotes(enq.superAdminNotes || '');
+                                setEnquiryCommercialTerms(enq.commercialTerms || '');
+                                setEnqTitles(enq.estimatedTitles || 5000);
+                                setEnqCopies(enq.estimatedCopies || 7500);
+                                setEnqLibrarians(enq.estimatedLibrarians || 5);
+                                setEnqStudents(enq.estimatedStudents || 500);
+                                setEnqStorageMb(enq.estimatedStorageMb || 2048);
+                              }}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium cursor-pointer"
+                            >
+                              Re-adjust Quotas
+                            </button>
+                          </div>
+                        )}
+                        {enq.status === 'rejected' && (
+                          <span className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-xs text-rose-700 font-semibold rounded-lg flex items-center space-x-1.5">
+                            <Ban className="w-3.5 h-3.5" />
+                            <span>Declined</span>
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-600">
-                        Contact: <strong>{enq.contactName}</strong> ({enq.contactEmail}) · {enq.contactPhone || 'No phone'}
-                      </div>
-                      {enq.message && <p className="text-xs text-slate-500 italic mt-1">&quot;{enq.message}&quot;</p>}
-                      <div className="flex items-center space-x-3 text-[11px] text-slate-500 mt-2">
-                        <span>Submitted: {new Date(enq.createdAt).toLocaleDateString()}</span>
-                        {enq.estimatedTitles && <span>· {enq.estimatedTitles} Titles</span>}
-                        {enq.estimatedStudents && <span>· {enq.estimatedStudents} Students</span>}
-                      </div>
                     </div>
-
-                    <div className="flex items-center space-x-2 self-start md:self-auto shrink-0">
-                      {enq.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => {
-                              saasStorage.approveSubscriptionEnquiry(enq.id);
-                              setRefreshNonce((n) => n + 1);
-                            }}
-                            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg cursor-pointer flex items-center space-x-1 shadow-xs transition-all active:scale-95"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Quick Approve</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setReviewEnquiry(enq);
-                              setEnquiryNotes(enq.superAdminNotes || '');
-                              setEnquiryCommercialTerms(enq.commercialTerms || '');
-                            }}
-                            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer"
-                          >
-                            Configure Limits
-                          </button>
-                        </>
-                      )}
-                      {enq.status === 'approved' && (
-                        <span className="text-xs text-emerald-700 font-bold flex items-center space-x-1">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Approved & Configured</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
+                  ))
               )}
             </div>
           </div>
@@ -958,34 +1210,109 @@ export const SubscriptionsManagementView: React.FC = () => {
         </div>
       )}
 
-      {/* ================= MODAL: REVIEW PREMIUM ENQUIRY ================= */}
+      {/* ================= MODAL: REVIEW PREMIUM ENQUIRY & CONFIGURE LIMITS ================= */}
       {reviewEnquiry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden my-8 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8 animate-in fade-in duration-150">
             <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-base">Review Premium Subscription Request</h3>
-                <p className="text-xs text-slate-400">Configure custom limits and approve commercial terms</p>
+                <h3 className="font-bold text-base">Configure Quotas & Approve Premium Request</h3>
+                <p className="text-xs text-slate-400">Set customized title, copy, staff, student allowances & commercial agreement</p>
               </div>
               <button onClick={() => setReviewEnquiry(null)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs">
+            <div className="p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+              {/* Institution & Contact Summary */}
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                <div><strong>Institution:</strong> {reviewEnquiry.tenantName}</div>
-                <div><strong>Contact:</strong> {reviewEnquiry.contactName} ({reviewEnquiry.contactEmail}) · {reviewEnquiry.contactPhone || 'N/A'}</div>
-                {reviewEnquiry.message && <div><strong>Message:</strong> &quot;{reviewEnquiry.message}&quot;</div>}
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-sm">{reviewEnquiry.tenantName}</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 uppercase">
+                    Target: {reviewEnquiry.requestedPlan || 'Premium'}
+                  </span>
+                </div>
+                <div className="text-slate-600">
+                  <strong>Contact:</strong> {reviewEnquiry.contactName} ({reviewEnquiry.contactEmail}) · {reviewEnquiry.contactPhone || 'N/A'}
+                </div>
+                {reviewEnquiry.message && (
+                  <div className="mt-1 text-slate-700 italic border-l-2 border-blue-400 pl-2">
+                    &quot;{reviewEnquiry.message}&quot;
+                  </div>
+                )}
+              </div>
+
+              {/* Custom Quota Overrides */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+                    <Sliders className="w-4 h-4 text-blue-600" />
+                    <span>Allocated Quota Allowances</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Overrides plan defaults upon activation</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Max Titles Quota</label>
+                    <input
+                      type="number"
+                      value={enqTitles}
+                      onChange={(e) => setEnqTitles(Math.max(1, parseInt(e.target.value) || 0))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Max Copies Quota</label>
+                    <input
+                      type="number"
+                      value={enqCopies}
+                      onChange={(e) => setEnqCopies(Math.max(1, parseInt(e.target.value) || 0))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Max Librarians</label>
+                    <input
+                      type="number"
+                      value={enqLibrarians}
+                      onChange={(e) => setEnqLibrarians(Math.max(1, parseInt(e.target.value) || 0))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Max Students</label>
+                    <input
+                      type="number"
+                      value={enqStudents}
+                      onChange={(e) => setEnqStudents(Math.max(1, parseInt(e.target.value) || 0))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Storage Quota (MB)</label>
+                    <input
+                      type="number"
+                      value={enqStorageMb}
+                      onChange={(e) => setEnqStorageMb(Math.max(100, parseInt(e.target.value) || 0))}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 font-bold text-slate-800"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Commercial Terms & Pricing Notes</label>
+                <label className="block font-semibold text-slate-700 mb-1">Commercial Terms & Pricing Agreement</label>
                 <textarea
                   rows={2}
                   value={enquiryCommercialTerms}
                   onChange={(e) => setEnquiryCommercialTerms(e.target.value)}
-                  placeholder="e.g. Annual contract @ ₹18,000/year authorized with dedicated database branch..."
+                  placeholder="e.g. Authorized annual agreement @ ₹24,000/year with dedicated database allocation..."
                   className="w-full px-3 py-2 rounded-lg border border-slate-300"
                 />
               </div>
@@ -996,28 +1323,235 @@ export const SubscriptionsManagementView: React.FC = () => {
                   rows={2}
                   value={enquiryNotes}
                   onChange={(e) => setEnquiryNotes(e.target.value)}
-                  placeholder="Internal review remarks..."
+                  placeholder="Internal remarks for compliance and audit trail..."
                   className="w-full px-3 py-2 rounded-lg border border-slate-300"
                 />
               </div>
             </div>
 
-            <div className="bg-slate-50 px-6 py-3 border-t flex justify-end space-x-2">
+            <div className="bg-slate-50 px-6 py-3.5 border-t flex justify-end space-x-2">
               <button
+                type="button"
                 onClick={() => setReviewEnquiry(null)}
-                className="px-4 py-2 text-slate-600 hover:text-slate-800 text-xs font-semibold"
+                className="px-4 py-2 text-slate-600 hover:text-slate-800 text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
+                disabled={approvingEnquiryId === reviewEnquiry.id}
                 onClick={() => handleApproveEnquiryAsPremium(reviewEnquiry)}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center space-x-1"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center space-x-1.5 shadow-xs"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Approve & Assign Premium</span>
+                <span>{approvingEnquiryId === reviewEnquiry.id ? 'Activating Quotas...' : 'Approve & Activate Quotas'}</span>
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: REJECT SUBSCRIPTION ENQUIRY ================= */}
+      {rejectModalEnquiry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in duration-150">
+            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Ban className="w-4 h-4 text-rose-400" />
+                <h3 className="font-bold text-sm">Decline Upgrade Request</h3>
+              </div>
+              <button onClick={() => setRejectModalEnquiry(null)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <div className="text-slate-500">Institution:</div>
+                <div className="font-bold text-slate-900 text-sm">{rejectModalEnquiry.tenantName}</div>
+                <div className="text-slate-500 mt-1">Contact: {rejectModalEnquiry.contactName} ({rejectModalEnquiry.contactEmail})</div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Reason for Declining (Optional)</label>
+                <textarea
+                  value={rejectNotes}
+                  onChange={(e) => setRejectNotes(e.target.value)}
+                  placeholder="e.g. Existing capacity sufficient, custom pricing terms rejected, or contact could not be reached."
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-lg border-slate-300"
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-50 px-5 py-3 border-t flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setRejectModalEnquiry(null)}
+                className="px-3.5 py-1.5 text-slate-600 hover:text-slate-800 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectEnquiry}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                Confirm Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: LOG NEW CUSTOM INQUIRY ================= */}
+      {newEnquiryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden my-8 animate-in fade-in duration-150">
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-base">Log Custom Subscription Inquiry</h3>
+                <p className="text-xs text-slate-400">Record a bespoke authority quotation or upgrade request</p>
+              </div>
+              <button onClick={() => setNewEnquiryModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewEnquiry} className="p-6 space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Select Target Library Institution</label>
+                <select
+                  value={newEnqTenantId}
+                  onChange={(e) => {
+                    setNewEnqTenantId(e.target.value);
+                    const t = tenants.find((item) => item.id === e.target.value);
+                    if (t) {
+                      setNewEnqName(t.settings.contactName || '');
+                      setNewEnqEmail(t.settings.contactEmail || '');
+                      setNewEnqPhone(t.settings.contactPhone || '');
+                    }
+                  }}
+                  className="w-full px-3 py-2 border rounded-lg bg-white"
+                >
+                  <option value="">-- Standalone / Unlinked Inquiry --</option>
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.slug})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Contact Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newEnqName}
+                    onChange={(e) => setNewEnqName(e.target.value)}
+                    placeholder="e.g. Dr. Salman Khan"
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Contact Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={newEnqEmail}
+                    onChange={(e) => setNewEnqEmail(e.target.value)}
+                    placeholder="salman@university.edu"
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Contact Phone</label>
+                  <input
+                    type="text"
+                    value={newEnqPhone}
+                    onChange={(e) => setNewEnqPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Requested Plan Tier</label>
+                  <select
+                    value={newEnqPlan}
+                    onChange={(e) => setNewEnqPlan(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg bg-white"
+                  >
+                    <option value="basic">Basic Plan</option>
+                    <option value="standard">Standard Campus Plan</option>
+                    <option value="premium">Premium University Plan</option>
+                    <option value="enterprise">Bespoke Enterprise / Multi-Branch</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Estimated Title Count</label>
+                  <input
+                    type="number"
+                    value={newEnqTitles}
+                    onChange={(e) => setNewEnqTitles(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Estimated Student Count</label>
+                  <input
+                    type="number"
+                    value={newEnqStudents}
+                    onChange={(e) => setNewEnqStudents(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Message / Requirements</label>
+                <textarea
+                  rows={2}
+                  value={newEnqMessage}
+                  onChange={(e) => setNewEnqMessage(e.target.value)}
+                  placeholder="Details regarding institution capacity, branch network, or special terms..."
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+
+              <div className="bg-slate-50 -mx-6 -mb-6 px-6 py-3.5 border-t flex justify-end space-x-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setNewEnquiryModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-800 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEnq}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-xs font-bold cursor-pointer shadow-xs"
+                >
+                  {isSubmittingEnq ? 'Recording...' : 'Record Custom Inquiry'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Toast */}
+      {actionToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 text-xs font-semibold flex items-center space-x-2 animate-in slide-in-from-bottom duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{actionToast}</span>
         </div>
       )}
     </div>

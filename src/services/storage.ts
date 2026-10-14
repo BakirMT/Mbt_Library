@@ -2545,6 +2545,199 @@ class SaasStorageService {
     } catch {}
     return res;
   }
+
+  async rejectSubscriptionEnquiryAsync(
+    enquiryId: string,
+    notes?: string
+  ): Promise<{ success: boolean; tenantName?: string }> {
+    this.updateSubscriptionEnquiryStatus(enquiryId, 'rejected', notes);
+    try {
+      await fetch(`/api/super-admin/enquiries/${encodeURIComponent(enquiryId)}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      });
+      await this.syncSubscriptionEnquiriesFromApi();
+    } catch {}
+    const list = this.getSubscriptionEnquiries();
+    const enq = list.find((e) => e.id === enquiryId);
+    return { success: true, tenantName: enq?.tenantName };
+  }
+
+  // --- API SYNC: INVOICES ---
+  async syncInvoicesFromApi(): Promise<Invoice[]> {
+    try {
+      const res = await fetch('/api/invoices');
+      if (res.ok) {
+        const remoteInvoices: any[] = await res.json();
+        if (Array.isArray(remoteInvoices) && remoteInvoices.length > 0) {
+          const mapped: Invoice[] = remoteInvoices.map((inv) => ({
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            tenantId: inv.tenantId,
+            tenantName: inv.tenantName || this.getTenantById(inv.tenantId)?.name || inv.tenantId,
+            planName: inv.planName,
+            billingCycle: inv.billingCycle || 'annual',
+            amount: Number(inv.amount),
+            currency: inv.currency || 'INR',
+            status: inv.status || 'pending',
+            issueDate: inv.issueDate ? new Date(inv.issueDate).toISOString() : new Date().toISOString(),
+            dueDate: inv.dueDate ? new Date(inv.dueDate).toISOString() : new Date().toISOString(),
+            paidAt: inv.paidAt ? new Date(inv.paidAt).toISOString() : undefined,
+            paymentMethod: inv.paymentMethod || undefined,
+            transactionReference: inv.transactionReference || undefined,
+            notes: inv.notes || undefined,
+          }));
+
+          const local = this.getInvoices();
+          const mergedMap = new Map<string, Invoice>();
+          local.forEach((i) => mergedMap.set(i.id, i));
+          mapped.forEach((i) => mergedMap.set(i.id, i));
+          const merged = Array.from(mergedMap.values());
+          saveToStorage(STORAGE_KEYS.INVOICES, merged);
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mbt_invoices_updated', { detail: merged }));
+          }
+          return merged;
+        }
+      }
+    } catch {}
+    return this.getInvoices();
+  }
+
+  createInvoice(payload: {
+    tenantId: string;
+    planName: string;
+    billingCycle: 'monthly' | 'annual';
+    amount: number;
+    dueDate: string;
+    currency?: string;
+    notes?: string;
+  }): Invoice {
+    const tenant = this.getTenantById(payload.tenantId);
+    const invoices = this.getInvoices();
+    const id = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const invoiceNumber = `INV-MBT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const newInvoice: Invoice = {
+      id,
+      invoiceNumber,
+      tenantId: payload.tenantId,
+      tenantName: tenant?.name || payload.tenantId,
+      planName: payload.planName,
+      billingCycle: payload.billingCycle,
+      amount: payload.amount,
+      currency: payload.currency || 'INR',
+      status: 'pending',
+      issueDate: new Date().toISOString(),
+      dueDate: new Date(payload.dueDate).toISOString(),
+      notes: payload.notes,
+    };
+
+    invoices.unshift(newInvoice);
+    saveToStorage(STORAGE_KEYS.INVOICES, invoices);
+
+    this.logActivity({
+      tenantId: payload.tenantId,
+      tenantName: tenant?.name || payload.tenantId,
+      actorId: 'usr_super_admin_01',
+      actorName: 'Super Administrator',
+      actorRole: 'super_admin',
+      action: 'INVOICE_GENERATED',
+      category: 'subscription',
+      details: `Generated institutional invoice ${invoiceNumber} (₹${payload.amount.toLocaleString('en-IN')}) for ${tenant?.name || payload.tenantId}.`,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mbt_invoices_updated', { detail: invoices }));
+    }
+
+    return newInvoice;
+  }
+
+  // --- API SYNC: INVITATIONS (TOKENS) ---
+  async syncInvitationsFromApi(): Promise<Invitation[]> {
+    try {
+      const res = await fetch('/api/invitations');
+      if (res.ok) {
+        const remoteTokens: any[] = await res.json();
+        if (Array.isArray(remoteTokens) && remoteTokens.length > 0) {
+          const mapped: Invitation[] = remoteTokens.map((inv) => {
+            const tenant = this.getTenantById(inv.tenantId);
+            return {
+              id: inv.id,
+              token: inv.token,
+              tenantId: inv.tenantId,
+              tenantSlug: inv.tenantSlug || tenant?.slug || '',
+              tenantName: inv.tenantName || tenant?.name || inv.tenantId,
+              recipientEmail: inv.recipientEmail,
+              recipientName: inv.recipientName,
+              role: inv.role,
+              deliveryMethod: inv.deliveryMethod || 'manual_link',
+              status: inv.status,
+              expiresAt: new Date(inv.expiresAt).toISOString(),
+              createdAt: new Date(inv.createdAt).toISOString(),
+              acceptedAt: inv.acceptedAt ? new Date(inv.acceptedAt).toISOString() : undefined,
+              createdBy: inv.createdBy || 'usr_super_admin_01',
+            };
+          });
+
+          const local = this.getInvitations();
+          const mergedMap = new Map<string, Invitation>();
+          local.forEach((i) => mergedMap.set(i.id, i));
+          mapped.forEach((i) => mergedMap.set(i.id, i));
+          const merged = Array.from(mergedMap.values());
+          saveToStorage(STORAGE_KEYS.INVITATIONS, merged);
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mbt_invitations_updated', { detail: merged }));
+          }
+          return merged;
+        }
+      }
+    } catch {}
+    return this.getInvitations();
+  }
+
+  // --- API SYNC: ACTIVITY LOGS ---
+  async syncActivityLogsFromApi(): Promise<ActivityLog[]> {
+    try {
+      const res = await fetch('/api/activity-logs?limit=150');
+      if (res.ok) {
+        const remoteLogs: any[] = await res.json();
+        if (Array.isArray(remoteLogs) && remoteLogs.length > 0) {
+          const mapped: ActivityLog[] = remoteLogs.map((l) => ({
+            id: l.id,
+            tenantId: l.tenantId || undefined,
+            tenantName: l.tenantName || (l.tenantId ? this.getTenantById(l.tenantId)?.name : undefined),
+            actorId: l.actorId,
+            actorName: l.actorName,
+            actorRole: l.actorRole,
+            action: l.action,
+            category: l.category,
+            details: l.details,
+            timestamp: new Date(l.timestamp).toISOString(),
+          }));
+
+          const local = this.getActivityLogs();
+          const mergedMap = new Map<string, ActivityLog>();
+          local.forEach((l) => mergedMap.set(l.id, l));
+          mapped.forEach((l) => mergedMap.set(l.id, l));
+          const merged = Array.from(mergedMap.values()).sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+          saveToStorage(STORAGE_KEYS.LOGS, merged);
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mbt_logs_updated', { detail: merged }));
+          }
+          return merged;
+        }
+      }
+    } catch {}
+    return this.getActivityLogs();
+  }
 }
 
 export const saasStorage = new SaasStorageService();

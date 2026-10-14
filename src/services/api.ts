@@ -390,4 +390,115 @@ export const apiClient = {
     }
     return data;
   },
+
+  // --- PLATFORM INVOICES & REVENUE ---
+  async getInvoices() {
+    const res = await fetch('/api/invoices');
+    if (!res.ok) throw new Error('Failed to fetch platform invoices');
+    return res.json();
+  },
+
+  async createInvoice(payload: {
+    tenantId: string;
+    planName?: string;
+    billingCycle?: string;
+    amount: number;
+    currency?: string;
+    dueDate: string;
+    notes?: string;
+  }) {
+    const res = await fetch('/api/invoices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to generate institutional invoice');
+    return data;
+  },
+
+  async payInvoice(invoiceId: string, payload: {
+    paymentMethod?: string;
+    transactionReference?: string;
+    notes?: string;
+  }) {
+    const res = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to record invoice payment');
+    return data;
+  },
+
+  async getRevenueAnalytics() {
+    const res = await fetch('/api/super-admin/revenue');
+    if (!res.ok) throw new Error('Failed to fetch revenue analytics');
+    return res.json();
+  },
+
+  // --- ISSUED TOKENS & INVITATIONS ---
+  async getInvitations() {
+    const res = await fetch('/api/invitations');
+    if (!res.ok) throw new Error('Failed to fetch platform invitation tokens');
+    return res.json();
+  },
+
+  async createInvitation(payload: {
+    tenantId: string;
+    recipientEmail: string;
+    recipientName: string;
+    role: string;
+    deliveryMethod?: string;
+  }) {
+    const res = await fetch('/api/invitations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to issue invitation token');
+    return data;
+  },
+
+  async revokeInvitation(invitationId: string) {
+    const res = await fetch(`/api/invitations/${encodeURIComponent(invitationId)}/revoke`, {
+      method: 'POST',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to revoke token');
+    return data;
+  },
+
+  // --- ACTIVITY LOGS & AUDIT TRAIL ---
+  async getActivityLogs(params?: { category?: string; tenantId?: string; limit?: number }) {
+    const query = new URLSearchParams();
+    if (params?.category && params.category !== 'all') query.set('category', params.category);
+    if (params?.tenantId) query.set('tenantId', params.tenantId);
+    if (params?.limit) query.set('limit', String(params.limit));
+
+    const res = await fetch(`/api/activity-logs?${query.toString()}`);
+    if (!res.ok) throw new Error('Failed to fetch activity logs');
+    return res.json();
+  },
+
+  async logActivity(payload: {
+    tenantId?: string;
+    actorId?: string;
+    actorName?: string;
+    actorRole?: string;
+    action: string;
+    category: string;
+    details: string;
+  }) {
+    const res = await fetch('/api/activity-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to record audit activity');
+    return data;
+  },
 };
