@@ -8,7 +8,7 @@ import { RouterProvider, useRouter } from './router/RouterContext';
 import { SuperAdminLayout } from './components/layout/SuperAdminLayout';
 import { DashboardOverview } from './components/superAdmin/DashboardOverview';
 import { LibraryManagement } from './components/superAdmin/LibraryManagement';
-import { SubscriptionPlansManager } from './components/superAdmin/SubscriptionPlansManager';
+import { SubscriptionsManagementView } from './components/superAdmin/SubscriptionsManagementView';
 import { BillingInvoicesManager } from './components/superAdmin/BillingInvoicesManager';
 import { InvitationsManager } from './components/superAdmin/InvitationsManager';
 import { ActivityLogsView } from './components/superAdmin/ActivityLogsView';
@@ -218,7 +218,7 @@ const AppContent: React.FC = () => {
         <LibraryManagement onOpenProvisionModal={() => setProvisionModalOpen(true)} />
       )}
 
-      {activeTab === 'plans' && <SubscriptionPlansManager />}
+      {activeTab === 'plans' && <SubscriptionsManagementView />}
 
       {activeTab === 'billing' && <BillingInvoicesManager />}
 

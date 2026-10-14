@@ -30,6 +30,7 @@ import {
   SubscriptionEnquiry,
 } from '../../types/saas';
 import { saasStorage } from '../../services/storage';
+import { SubscriptionPlansManager } from './SubscriptionPlansManager';
 
 export const SubscriptionsManagementView: React.FC = () => {
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -37,8 +38,11 @@ export const SubscriptionsManagementView: React.FC = () => {
   const [planFilter, setPlanFilter] = useState('all');
   const [overrideFilter, setOverrideFilter] = useState<'all' | 'custom' | 'default'>('all');
 
-  // Active sub-tab: 'libraries' or 'enquiries'
-  const [activeSubTab, setActiveSubTab] = useState<'libraries' | 'enquiries'>('libraries');
+  // Active sub-tab: 'libraries', 'enquiries', or 'tiers'
+  const [activeSubTab, setActiveSubTab] = useState<'libraries' | 'enquiries' | 'tiers'>(() => {
+    const enquiries = saasStorage.getSubscriptionEnquiries();
+    return enquiries.some((e) => e.status === 'pending') ? 'enquiries' : 'libraries';
+  });
 
   // Edit Subscription & Limits Modal State
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
@@ -294,12 +298,22 @@ export const SubscriptionsManagementView: React.FC = () => {
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <span>Premium Enquiries</span>
+            <span>Customer Upgrade Requests</span>
             {pendingEnquiriesCount > 0 && (
-              <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center font-black">
+              <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center font-black animate-pulse">
                 {pendingEnquiriesCount}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => setActiveSubTab('tiers')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1.5 ${
+              activeSubTab === 'tiers'
+                ? 'bg-white text-slate-900 shadow-xs font-bold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>Plan Tiers & Pricing ({plans.length})</span>
           </button>
         </div>
       </div>
@@ -629,6 +643,11 @@ export const SubscriptionsManagementView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Sub-tab 3: Pricing Tiers & Global Quotas */}
+      {activeSubTab === 'tiers' && (
+        <SubscriptionPlansManager />
       )}
 
       {/* ================= MODAL: EDIT SUBSCRIPTION & LIMITS ================= */}

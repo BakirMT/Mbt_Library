@@ -15,6 +15,7 @@ import {
   Layers,
   ChevronRight,
   Sparkles,
+  CheckCircle2,
 } from 'lucide-react';
 import { useRouter } from '../../router/RouterContext';
 import { saasStorage } from '../../services/storage';
@@ -36,6 +37,8 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
   const { navigate, logoutSuperAdmin, superAdminUser } = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tenantSelectorOpen, setTenantSelectorOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeFeedback, setUpgradeFeedback] = useState<string | null>(null);
 
   const tenants = saasStorage.getTenants();
   const subscriptions = saasStorage.getSubscriptions();
@@ -295,9 +298,10 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
             {pendingEnquiriesCount > 0 && (
               <button
-                onClick={() => handleNavClick('plans')}
-                className="inline-flex items-center space-x-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs rounded-lg transition-colors cursor-pointer"
-                title={`${pendingEnquiriesCount} pending upgrade request(s)`}
+                type="button"
+                onClick={() => setShowUpgradeModal(true)}
+                className="inline-flex items-center space-x-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs rounded-lg transition-colors cursor-pointer active:scale-95 shadow-xs"
+                title={`${pendingEnquiriesCount} pending upgrade request(s) - Click to review & activate`}
               >
                 <Sparkles className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
                 <span>{pendingEnquiriesCount} Upgrade Req</span>
@@ -306,8 +310,9 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
 
             {/* Quick action button */}
             <button
+              type="button"
               onClick={onOpenProvisionModal}
-              className="hidden sm:inline-flex items-center space-x-1.5 px-3 sm:px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg shadow-xs hover:shadow transition-colors cursor-pointer"
+              className="inline-flex items-center space-x-1.5 px-3 sm:px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded-lg shadow-xs hover:shadow transition-all cursor-pointer active:scale-95"
             >
               <PlusCircle className="w-4 h-4 shrink-0" />
               <span>Create Library</span>
@@ -358,6 +363,115 @@ export const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({
           {children}
         </main>
       </div>
+
+      {/* Quick Upgrade Requests Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full p-6 space-y-4 animate-in fade-in duration-150 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Customer Upgrade Requests</h3>
+                  <p className="text-xs text-slate-500">
+                    Requests submitted by library admins and expired institutions
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUpgradeModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {upgradeFeedback && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-semibold flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{upgradeFeedback}</span>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto space-y-3 divide-y divide-slate-100 pr-1">
+              {enquiries.filter((e) => e.status === 'pending').length === 0 ? (
+                <div className="py-8 text-center text-slate-500 space-y-2">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+                  <p className="text-sm font-semibold text-slate-800">All Upgrade Requests Processed!</p>
+                  <p className="text-xs text-slate-500">No pending upgrade requests from customer libraries.</p>
+                </div>
+              ) : (
+                enquiries
+                  .filter((e) => e.status === 'pending')
+                  .map((enq) => (
+                    <div key={enq.id} className="pt-3 first:pt-0 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-bold text-slate-900 text-sm">{enq.tenantName}</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 uppercase">
+                              Plan: {enq.requestedPlan || 'Standard'}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            Representative: <strong className="text-slate-800">{enq.contactName}</strong> ({enq.contactEmail} · {enq.contactPhone || 'No phone'})
+                          </div>
+                          {enq.message && (
+                            <p className="text-xs text-slate-600 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                              &quot;{enq.message}&quot;
+                            </p>
+                          )}
+                          <div className="text-[11px] text-slate-400">
+                            Submitted: {new Date(enq.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const res = saasStorage.approveSubscriptionEnquiry(enq.id);
+                            if (res.success) {
+                              setUpgradeFeedback(`Approved "${res.tenantName}" for ${res.planName}! Library access is active.`);
+                              saasStorage.syncSubscriptionEnquiriesFromApi().catch(() => {});
+                              setTimeout(() => setUpgradeFeedback(null), 5000);
+                            }
+                          }}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer shrink-0 active:scale-95 transition-all self-start"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Approve & Activate</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUpgradeModal(false);
+                  handleNavClick('plans');
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 font-bold underline cursor-pointer"
+              >
+                Go to Full Subscriptions & Plans Manager →
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowUpgradeModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
