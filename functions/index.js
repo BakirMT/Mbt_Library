@@ -15,6 +15,8 @@ const auth = admin.auth();
 const resendApiKeySecret = defineSecret('RESEND_API_KEY');
 const otpHmacSecret = defineSecret('OTP_HMAC_SECRET');
 
+const PRIVILEGED_ROLES = ['super_admin', 'platform_owner', 'tenant_admin', 'admin', 'librarian', 'senior_librarian'];
+
 // Helper: Normalize Email
 function normalizeEmail(email) {
   if (!email || typeof email !== 'string') return '';
@@ -27,13 +29,83 @@ function isValidEmail(email) {
   return re.test(email);
 }
 
-// Helper: Secure HMAC Verifier
+// Helper: Secure HMAC Verifier (Throws if secret is missing)
 function generateHmac(email, code) {
-  const secretKey = otpHmacSecret.value() || process.env.OTP_HMAC_SECRET || 'mbt-library-secure-otp-hmac-key-2026';
+  let secretKey;
+  try {
+    secretKey = typeof otpHmacSecret.value === 'function' ? otpHmacSecret.value() : null;
+  } catch (e) {
+    secretKey = null;
+  }
+  if (!secretKey) {
+    secretKey = process.env.OTP_HMAC_SECRET;
+  }
+
+  if (!secretKey) {
+    throw new Error('MISSING_HMAC_SECRET');
+  }
+
   return crypto
     .createHmac('sha256', secretKey)
     .update(`${email}:${code}`)
     .digest('hex');
+}
+
+// Helper: Prevent Role Escalation by deriving trusted role & tenant
+async function determineUserRoleAndTenant(email, requestedRole, requestedTenantSlug) {
+  let derivedRole = 'user';
+  let derivedTenant = null;
+
+  // 1. Check existing Firebase Auth user custom claims
+  try {
+    const userRecord = await auth.getUserByEmail(email);
+    if (userRecord && userRecord.customClaims) {
+      if (userRecord.customClaims.role) derivedRole = userRecord.customClaims.role;
+      if (userRecord.customClaims.tenantSlug) derivedTenant = userRecord.customClaims.tenantSlug;
+    }
+  } catch (e) {
+    // User does not exist yet in Firebase Auth
+  }
+
+  // 2. Check Firestore users collection
+  try {
+    const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
+    if (!userSnap.empty) {
+      const uData = userSnap.docs[0].data();
+      if (uData.role) derivedRole = uData.role;
+      if (uData.isSuperAdmin) derivedRole = 'super_admin';
+      if (uData.tenantSlug) derivedTenant = uData.tenantSlug;
+    }
+  } catch (e) {}
+
+  // 3. Check pending invitations if role is still default 'user'
+  if (derivedRole === 'user') {
+    try {
+      const inviteSnap = await db.collection('invitations')
+        .where('email', '==', email)
+        .where('status', '==', 'pending')
+        .limit(1)
+        .get();
+      if (!inviteSnap.empty) {
+        const invite = inviteSnap.docs[0].data();
+        if (invite.role) derivedRole = invite.role;
+        if (invite.tenantSlug) derivedTenant = invite.tenantSlug;
+      }
+    } catch (e) {}
+  }
+
+  // 4. Role escalation check: Suppress privileged role requests from unauthenticated clients
+  if (PRIVILEGED_ROLES.includes(requestedRole) && !PRIVILEGED_ROLES.includes(derivedRole)) {
+    console.warn(`[Security Alert] Suppressed unauthorized request for role "${requestedRole}" for email "${email}". Defaulting to "${derivedRole}".`);
+  } else if (requestedRole && !PRIVILEGED_ROLES.includes(requestedRole)) {
+    if (derivedRole === 'user') derivedRole = requestedRole;
+  }
+
+  if (requestedTenantSlug && !derivedTenant) {
+    derivedTenant = requestedTenantSlug;
+  }
+
+  return { role: derivedRole, tenantSlug: derivedTenant };
 }
 
 /**
@@ -43,23 +115,19 @@ function generateHmac(email, code) {
 exports.sendEmailOtp = onRequest(
   { secrets: [resendApiKeySecret, otpHmacSecret], cors: true },
   async (req, res) => {
-    // Only accept POST requests
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
     try {
       const rawEmail = req.body.email || req.body.target || req.body.destination;
-      const tenantSlug = req.body.tenantSlug || null;
-      const role = req.body.role || null;
-
       const normalizedEmail = normalizeEmail(rawEmail);
 
       if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
         return res.status(400).json({ error: 'A valid email address is required.' });
       }
 
-      // Rate limit & Resend Cooldown Check (60 seconds per email)
+      // 1. Rate Limit & Resend Cooldown Check (60 seconds per email)
       const now = Date.now();
       const recentSnapshot = await db
         .collection('otp_challenges')
@@ -80,13 +148,42 @@ exports.sendEmailOtp = onRequest(
         }
       }
 
-      // Generate cryptographically secure 6-digit OTP code
+      // 2. Resolve Role and Tenant securely
+      const { role, tenantSlug } = await determineUserRoleAndTenant(
+        normalizedEmail,
+        req.body.role,
+        req.body.tenantSlug
+      );
+
+      // 3. Generate Cryptographically Secure 6-digit OTP
       const otpCode = crypto.randomInt(100000, 1000000).toString();
-      const otpVerifier = generateHmac(normalizedEmail, otpCode);
+
+      let otpVerifier;
+      try {
+        otpVerifier = generateHmac(normalizedEmail, otpCode);
+      } catch (e) {
+        if (e.message === 'MISSING_HMAC_SECRET') {
+          console.error('[sendEmailOtp] Fatal: OTP_HMAC_SECRET is missing from configuration.');
+          return res.status(500).json({
+            error: 'Authentication service secret configuration error. Please contact administrator.',
+          });
+        }
+        throw e;
+      }
+
       const expiresAt = now + 5 * 60 * 1000; // 5 minutes expiration
 
-      // Retrieve Resend API Key from Cloud Secret Manager or Environment
-      const apiKey = resendApiKeySecret.value() || process.env.RESEND_API_KEY;
+      // 4. Retrieve Resend API Key
+      let apiKey;
+      try {
+        apiKey = typeof resendApiKeySecret.value === 'function' ? resendApiKeySecret.value() : null;
+      } catch (e) {
+        apiKey = null;
+      }
+      if (!apiKey) {
+        apiKey = process.env.RESEND_API_KEY;
+      }
+
       if (!apiKey) {
         console.error('[sendEmailOtp] Missing RESEND_API_KEY secret.');
         return res.status(500).json({
@@ -94,9 +191,9 @@ exports.sendEmailOtp = onRequest(
         });
       }
 
-      // Dispatch Email via Resend API
+      // 5. Dispatch Email via Resend API
       const resend = new Resend(apiKey);
-const senderEmail = process.env.RESEND_FROM_EMAIL || 'MBT Library Authentication <onboarding@resend.dev>';
+      const senderEmail = process.env.RESEND_FROM_EMAIL || 'MBT Library Authentication <onboarding@resend.dev>';
       const { data: sendData, error: sendError } = await resend.emails.send({
         from: senderEmail,
         to: [normalizedEmail],
@@ -126,7 +223,7 @@ const senderEmail = process.env.RESEND_FROM_EMAIL || 'MBT Library Authentication
         });
       }
 
-      // Store ONLY the HMAC verifier in Firestore (Never store plaintext OTP)
+      // 6. Store ONLY the HMAC verifier in Firestore (Never store plaintext OTP)
       const challengeRef = db.collection('otp_challenges').doc();
       await challengeRef.set({
         email: normalizedEmail,
@@ -145,7 +242,6 @@ const senderEmail = process.env.RESEND_FROM_EMAIL || 'MBT Library Authentication
       const emailParts = normalizedEmail.split('@');
       const maskedEmail = `${emailParts[0].slice(0, 3)}***@${emailParts[1]}`;
 
-      // Return clean success response without exposing OTP code
       return res.json({
         success: true,
         message: `Verification code dispatched to ${maskedEmail}.`,
@@ -173,8 +269,6 @@ exports.verifyEmailOtp = onRequest({ secrets: [otpHmacSecret], cors: true }, asy
   try {
     const rawEmail = req.body.email || req.body.target || req.body.destination;
     const rawCode = req.body.otpCode || req.body.otp || req.body.code;
-    const tenantSlug = req.body.tenantSlug || null;
-    const role = req.body.role || null;
 
     const normalizedEmail = normalizeEmail(rawEmail);
     const submittedCode = String(rawCode || '').trim();
@@ -184,7 +278,18 @@ exports.verifyEmailOtp = onRequest({ secrets: [otpHmacSecret], cors: true }, asy
     }
 
     const now = Date.now();
-    const expectedVerifier = generateHmac(normalizedEmail, submittedCode);
+    let expectedVerifier;
+    try {
+      expectedVerifier = generateHmac(normalizedEmail, submittedCode);
+    } catch (e) {
+      if (e.message === 'MISSING_HMAC_SECRET') {
+        console.error('[verifyEmailOtp] Fatal: OTP_HMAC_SECRET is missing from configuration.');
+        return res.status(500).json({
+          error: 'Authentication service secret configuration error. Please contact administrator.',
+        });
+      }
+      throw e;
+    }
 
     // Fetch active challenge for email
     const querySnapshot = await db
@@ -202,44 +307,57 @@ exports.verifyEmailOtp = onRequest({ secrets: [otpHmacSecret], cors: true }, asy
     const challengeDoc = querySnapshot.docs[0];
     const challengeRef = challengeDoc.ref;
 
-    let isVerified = false;
+    let transactionResult = { success: false, reason: 'UNKNOWN' };
 
-    // Concurrency-safe Firestore transaction to check and consume OTP
+    // Concurrency-safe Firestore transaction without throwing errors inside transaction
     await db.runTransaction(async (transaction) => {
       const snap = await transaction.get(challengeRef);
       if (!snap.exists) {
-        throw new Error('CHALLENGE_NOT_FOUND');
+        transactionResult = { success: false, reason: 'NOT_FOUND' };
+        return;
       }
 
       const data = snap.data();
 
-      if (data.isConsumed || now > data.expiresAt) {
-        throw new Error('CHALLENGE_EXPIRED');
+      if (data.isConsumed) {
+        transactionResult = { success: false, reason: 'ALREADY_CONSUMED' };
+        return;
       }
 
-      if ((data.attempts || 0) >= (data.maxAttempts || 5)) {
+      if (now > data.expiresAt) {
+        transaction.update(challengeRef, { isConsumed: true, invalidatedReason: 'EXPIRED' });
+        transactionResult = { success: false, reason: 'EXPIRED' };
+        return;
+      }
+
+      const currentAttempts = data.attempts || 0;
+      const maxAttempts = data.maxAttempts || 5;
+
+      if (currentAttempts >= maxAttempts) {
         transaction.update(challengeRef, { isConsumed: true, invalidatedReason: 'EXCESSIVE_ATTEMPTS' });
-        throw new Error('CHALLENGE_MAX_ATTEMPTS');
+        transactionResult = { success: false, reason: 'EXCESSIVE_ATTEMPTS' };
+        return;
       }
 
       // Timing-safe comparison of stored HMAC vs computed HMAC
-      const storedBuffer = Buffer.from(data.otpVerifier, 'hex');
+      const storedBuffer = Buffer.from(data.otpVerifier || '', 'hex');
       const submittedBuffer = Buffer.from(expectedVerifier, 'hex');
 
       let matches = false;
-      if (storedBuffer.length === submittedBuffer.length) {
+      if (storedBuffer.length === submittedBuffer.length && storedBuffer.length > 0) {
         matches = crypto.timingSafeEqual(storedBuffer, submittedBuffer);
       }
 
       if (!matches) {
-        const newAttempts = (data.attempts || 0) + 1;
+        const newAttempts = currentAttempts + 1;
         const updates = { attempts: newAttempts };
-        if (newAttempts >= (data.maxAttempts || 5)) {
+        if (newAttempts >= maxAttempts) {
           updates.isConsumed = true;
           updates.invalidatedReason = 'EXCESSIVE_ATTEMPTS';
         }
         transaction.update(challengeRef, updates);
-        throw new Error('INVALID_CODE');
+        transactionResult = { success: false, reason: 'INVALID_CODE' };
+        return;
       }
 
       // Valid OTP: Consume challenge atomically to prevent replay attacks
@@ -248,20 +366,30 @@ exports.verifyEmailOtp = onRequest({ secrets: [otpHmacSecret], cors: true }, asy
         consumedAt: now,
       });
 
-      isVerified = true;
+      transactionResult = {
+        success: true,
+        challengeRole: data.role,
+        challengeTenant: data.tenantSlug,
+      };
     });
 
-    if (!isVerified) {
+    if (!transactionResult.success) {
       return res.status(400).json({ error: 'Invalid or expired verification code.' });
     }
 
-    // Check existing Firebase Auth user before creating account
+    // Determine trusted role and tenant
+    const { role, tenantSlug } = await determineUserRoleAndTenant(
+      normalizedEmail,
+      req.body.role || transactionResult.challengeRole,
+      req.body.tenantSlug || transactionResult.challengeTenant
+    );
+
+    // Get or create Firebase Auth user safely
     let userRecord;
     try {
       userRecord = await auth.getUserByEmail(normalizedEmail);
     } catch (authErr) {
       if (authErr.code === 'auth/user-not-found') {
-        // Create user with verified email state
         userRecord = await auth.createUser({
           email: normalizedEmail,
           emailVerified: true,
@@ -292,18 +420,11 @@ exports.verifyEmailOtp = onRequest({ secrets: [otpHmacSecret], cors: true }, asy
         email: userRecord.email,
         displayName: userRecord.displayName,
       },
+      role: customClaims.role,
+      tenantSlug: customClaims.tenantSlug,
       message: 'Email address verified successfully.',
     });
   } catch (err) {
-    if (
-      err.message === 'CHALLENGE_NOT_FOUND' ||
-      err.message === 'CHALLENGE_EXPIRED' ||
-      err.message === 'CHALLENGE_MAX_ATTEMPTS' ||
-      err.message === 'INVALID_CODE'
-    ) {
-      return res.status(400).json({ error: 'Invalid or expired verification code.' });
-    }
-
     console.error('[verifyEmailOtp] Verification error:', err);
     return res.status(500).json({ error: 'OTP verification failed. Please request a new code.' });
   }

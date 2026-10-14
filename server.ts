@@ -216,7 +216,7 @@ app.get('/api/tenants/:slug', async (req, res) => {
 });
 
 // --- PRODUCTION REAL EMAIL OTP AUTHENTICATION ENDPOINTS (Resend API + HMAC + Firebase Auth) ---
-const HMAC_SECRET = process.env.OTP_HMAC_SECRET || 'mbt-library-secure-otp-hmac-key-2026';
+const PRIVILEGED_ROLES = ['super_admin', 'platform_owner', 'tenant_admin', 'admin', 'librarian', 'senior_librarian'];
 
 function normalizeEmail(email: string): string {
   if (!email || typeof email !== 'string') return '';
@@ -228,13 +228,82 @@ function isValidEmail(email: string): boolean {
 }
 
 function generateHmac(email: string, code: string): string {
-  return crypto.createHmac('sha256', HMAC_SECRET).update(`${email}:${code}`).digest('hex');
+  const secret = process.env.OTP_HMAC_SECRET;
+  if (!secret) {
+    throw new Error('MISSING_HMAC_SECRET');
+  }
+  return crypto.createHmac('sha256', secret).update(`${email}:${code}`).digest('hex');
+}
+
+async function determineUserRoleAndTenant(email: string, requestedRole?: string, requestedTenantSlug?: string) {
+  let derivedRole = 'user';
+  let derivedTenantSlug: string | null = null;
+
+  // 1. Check existing Auth custom claims
+  try {
+    const userRecord = await adminAuth.getUserByEmail(email);
+    if (userRecord && userRecord.customClaims) {
+      if (userRecord.customClaims.role) derivedRole = userRecord.customClaims.role as string;
+      if (userRecord.customClaims.tenantSlug) derivedTenantSlug = userRecord.customClaims.tenantSlug as string;
+    }
+  } catch (e) {}
+
+  // 2. Check Cloud SQL DB users & tenantMemberships table
+  try {
+    const uRows = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (uRows.length) {
+      const u = uRows[0];
+      if (u.isSuperAdmin) {
+        derivedRole = 'super_admin';
+      } else {
+        const mRows = await db
+          .select({ role: tenantMemberships.role, tenantId: tenantMemberships.tenantId })
+          .from(tenantMemberships)
+          .where(and(eq(tenantMemberships.userId, u.id), eq(tenantMemberships.isActive, true)))
+          .limit(1);
+        if (mRows.length) {
+          derivedRole = mRows[0].role;
+          const tRows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, mRows[0].tenantId)).limit(1);
+          if (tRows.length) derivedTenantSlug = tRows[0].slug;
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 3. Check invitations table
+  if (derivedRole === 'user') {
+    try {
+      const invRows = await db
+        .select()
+        .from(invitations)
+        .where(and(eq(invitations.recipientEmail, email), eq(invitations.status, 'pending')))
+        .limit(1);
+      if (invRows.length) {
+        const inv = invRows[0];
+        if (inv.role) derivedRole = inv.role;
+        const tRows = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, inv.tenantId)).limit(1);
+        if (tRows.length) derivedTenantSlug = tRows[0].slug;
+      }
+    } catch (e) {}
+  }
+
+  // 4. Sanitize requested role for new users
+  if (requestedRole && PRIVILEGED_ROLES.includes(requestedRole) && !PRIVILEGED_ROLES.includes(derivedRole)) {
+    console.warn(`[Security Alert] Suppressed unauthorized request for role "${requestedRole}" for email "${email}". Defaulting to "${derivedRole}".`);
+  } else if (requestedRole && !PRIVILEGED_ROLES.includes(requestedRole)) {
+    if (derivedRole === 'user') derivedRole = requestedRole;
+  }
+
+  if (requestedTenantSlug && !derivedTenantSlug) {
+    derivedTenantSlug = requestedTenantSlug;
+  }
+
+  return { role: derivedRole, tenantSlug: derivedTenantSlug };
 }
 
 const handleSendOtpRoute = async (req: Request, res: Response) => {
   try {
     const rawDest = req.body.email || req.body.destination || req.body.target || req.body.phone || req.body.mobile;
-    const { tenantSlug, role } = req.body;
 
     const normalizedEmail = normalizeEmail(rawDest);
 
@@ -271,12 +340,27 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Generate Cryptographically Secure 6-digit OTP
+    // 2. Resolve Role and Tenant securely
+    const { role, tenantSlug } = await determineUserRoleAndTenant(normalizedEmail, req.body.role, req.body.tenantSlug);
+
+    // 3. Generate Cryptographically Secure 6-digit OTP
     const otpCode = crypto.randomInt(100000, 1000000).toString();
-    const otpVerifier = generateHmac(normalizedEmail, otpCode);
+    let otpVerifier: string;
+    try {
+      otpVerifier = generateHmac(normalizedEmail, otpCode);
+    } catch (e: any) {
+      if (e.message === 'MISSING_HMAC_SECRET') {
+        console.error('[OTP Gateway] Fatal: OTP_HMAC_SECRET is not configured on the server.');
+        return res.status(500).json({
+          error: 'Authentication service secret configuration error. Please contact administrator.',
+        });
+      }
+      throw e;
+    }
+
     const expiresAt = new Date(nowMs + 5 * 60 * 1000); // 5 minutes
 
-    // 3. Send Email using Resend API (Backend only)
+    // 4. Send Email using Resend API (Backend only)
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
       console.warn('[OTP System] Warning: RESEND_API_KEY is not set in environment.');
@@ -286,8 +370,9 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
     }
 
     const resend = new Resend(apiKey);
+    const senderEmail = process.env.RESEND_FROM_EMAIL || 'MBT Library Authentication <onboarding@resend.dev>';
     const { data: resendData, error: resendError } = await resend.emails.send({
-      from: 'MBT Library Authentication <onboarding@resend.dev>',
+      from: senderEmail,
       to: [normalizedEmail],
       subject: 'Your 6-Digit MBT Library Login Verification Code',
       html: `
@@ -315,7 +400,7 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
       });
     }
 
-    // 4. Save ONLY keyed HMAC verifier (Never plaintext OTP)
+    // 5. Save ONLY keyed HMAC verifier (Never plaintext OTP)
     const id = `otp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     await db.insert(otpVerifications).values({
       id,
@@ -337,7 +422,7 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
         tenantSlug,
         role,
         attempts: 0,
-        maxAttempts: 3,
+        maxAttempts: 5,
         isConsumed: false,
         expiresAt: expiresAt.getTime(),
         createdAt: nowMs,
@@ -376,7 +461,7 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('[sendEmailOtp] Error:', err);
-    res.status(500).json({ error: err.message || 'Failed to dispatch verification email.' });
+    res.status(500).json({ error: 'Failed to process email verification request.' });
   }
 };
 
@@ -384,7 +469,6 @@ const handleVerifyOtpRoute = async (req: Request, res: Response) => {
   try {
     const rawEmail = req.body.email || req.body.destination || req.body.target || req.body.phone || req.body.mobile;
     const rawCode = req.body.otpCode || req.body.otp || req.body.code;
-    const { tenantSlug, role } = req.body;
 
     const normalizedEmail = normalizeEmail(rawEmail);
     const submittedCode = String(rawCode || '').trim();
@@ -394,7 +478,18 @@ const handleVerifyOtpRoute = async (req: Request, res: Response) => {
     }
 
     const now = new Date();
-    const expectedVerifier = generateHmac(normalizedEmail, submittedCode);
+    let expectedVerifier: string;
+    try {
+      expectedVerifier = generateHmac(normalizedEmail, submittedCode);
+    } catch (e: any) {
+      if (e.message === 'MISSING_HMAC_SECRET') {
+        console.error('[verifyEmailOtp] Fatal: OTP_HMAC_SECRET is not configured on the server.');
+        return res.status(500).json({
+          error: 'Authentication service secret configuration error. Please contact administrator.',
+        });
+      }
+      throw e;
+    }
 
     // Concurrency & Replay-Safe Query
     const matchRows = await db
@@ -421,7 +516,7 @@ const handleVerifyOtpRoute = async (req: Request, res: Response) => {
     const submittedBuf = Buffer.from(expectedVerifier, 'hex');
 
     let isValid = false;
-    if (storedBuf.length === submittedBuf.length) {
+    if (storedBuf.length === submittedBuf.length && storedBuf.length > 0) {
       isValid = crypto.timingSafeEqual(storedBuf, submittedBuf);
     }
 
@@ -439,8 +534,15 @@ const handleVerifyOtpRoute = async (req: Request, res: Response) => {
       await adminDb.collection('otp_challenges').doc(record.id).update({ isConsumed: true, consumedAt: Date.now() });
     } catch (e) {}
 
-    // Check existing Firebase Auth user before creating or linking
-    let firebaseUser;
+    // Resolve derived role and tenant safely
+    const { role, tenantSlug } = await determineUserRoleAndTenant(
+      normalizedEmail,
+      req.body.role || record.role,
+      req.body.tenantSlug || record.tenantSlug
+    );
+
+    // Get or create Firebase Auth user
+    let firebaseUser: any;
     try {
       firebaseUser = await adminAuth.getUserByEmail(normalizedEmail);
     } catch (e: any) {
@@ -455,16 +557,14 @@ const handleVerifyOtpRoute = async (req: Request, res: Response) => {
       }
     }
 
-    // Generate Genuine Firebase Custom Token
-    let customToken = '';
-    if (firebaseUser) {
-      const claims = { role: role || 'user', tenantSlug: tenantSlug || null };
-      await adminAuth.setCustomUserClaims(firebaseUser.uid, claims);
-      customToken = await adminAuth.createCustomToken(firebaseUser.uid, claims);
-    } else {
-      // Fallback dev session token if Firebase Admin Auth is unconfigured locally
-      customToken = `dev_session_${Date.now()}_${normalizedEmail.replace(/[^a-zA-Z0-9]/g, '')}`;
+    if (!firebaseUser) {
+      return res.status(500).json({ error: 'Failed to establish user identity in authentication service.' });
     }
+
+    // Generate Genuine Firebase Custom Token with verified claims
+    const claims = { role: role || 'user', tenantSlug: tenantSlug || null, emailVerified: true };
+    await adminAuth.setCustomUserClaims(firebaseUser.uid, claims);
+    const customToken = await adminAuth.createCustomToken(firebaseUser.uid, claims);
 
     // Find DB user profile
     const uRows = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
@@ -474,9 +574,9 @@ const handleVerifyOtpRoute = async (req: Request, res: Response) => {
     await db.insert(activityLogs).values({
       id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       tenantId: null,
-      actorId: firebaseUser?.uid || userFound?.id || `usr_${Date.now()}`,
+      actorId: firebaseUser.uid || userFound?.id || `usr_${Date.now()}`,
       actorName: userFound?.fullName || normalizedEmail,
-      actorRole: role || (userFound?.isSuperAdmin ? 'super_admin' : 'user'),
+      actorRole: role,
       action: 'OTP_VERIFY_SUCCESS',
       category: 'auth',
       details: `Successfully verified 6-digit Resend OTP for ${normalizedEmail}.`,
@@ -487,12 +587,12 @@ const handleVerifyOtpRoute = async (req: Request, res: Response) => {
       success: true,
       customToken,
       user: {
-        id: firebaseUser?.uid || userFound?.id || `usr_${Date.now()}`,
+        id: firebaseUser.uid || userFound?.id || `usr_${Date.now()}`,
         email: normalizedEmail,
         fullName: userFound?.fullName || normalizedEmail.split('@')[0],
       },
-      tenantSlug: tenantSlug || record.tenantSlug,
-      role: role || record.role,
+      tenantSlug,
+      role,
       message: 'Email verification successful.',
     });
   } catch (err: any) {
