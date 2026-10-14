@@ -1401,6 +1401,126 @@ app.patch('/api/super-admin/enquiries/:id', async (req, res) => {
   }
 });
 
+app.post('/api/super-admin/enquiries/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes, commercialTerms } = req.body;
+
+    const enqRows = await db.select().from(subscriptionEnquiries).where(eq(subscriptionEnquiries.id, id)).limit(1);
+    if (!enqRows.length) return res.status(404).json({ error: 'Upgrade enquiry not found' });
+    const enq = enqRows[0];
+
+    // Find target plan matching request
+    const allPlans = await db.select().from(subscriptionPlans);
+    let targetPlan = allPlans.find(
+      (p) => p.code.toLowerCase() === (enq.requestedPlan || '').toLowerCase()
+    );
+    if (!targetPlan) {
+      const code = (enq.requestedPlan || '').toLowerCase();
+      if (code.includes('basic')) {
+        targetPlan = allPlans.find((p) => p.code === 'basic');
+      } else if (code.includes('standard')) {
+        targetPlan = allPlans.find((p) => p.code === 'standard');
+      } else {
+        targetPlan = allPlans.find((p) => p.code === 'premium') || allPlans[allPlans.length - 1];
+      }
+    }
+    if (!targetPlan) targetPlan = allPlans[0];
+
+    const tenantName = enq.tenantName;
+    const planName = targetPlan.name;
+
+    // Reactivate and upgrade subscription in database if tenantId is attached
+    if (enq.tenantId) {
+      const oneYearExpiry = new Date(Date.now() + 365 * 24 * 3600 * 1000);
+      const subRows = await db.select().from(subscriptions).where(eq(subscriptions.tenantId, enq.tenantId)).limit(1);
+
+      const customOverrides: any = {};
+      if (enq.estimatedTitles) customOverrides.customMaxTitles = Number(enq.estimatedTitles);
+      if (enq.estimatedCopies) customOverrides.customMaxCopies = Number(enq.estimatedCopies);
+      if (enq.estimatedLibrarians) customOverrides.customMaxLibrarians = Number(enq.estimatedLibrarians);
+      if (enq.estimatedStudents) customOverrides.customMaxStudents = Number(enq.estimatedStudents);
+      if (enq.estimatedStorageMb) customOverrides.customMaxStorageMb = Number(enq.estimatedStorageMb);
+
+      if (subRows.length) {
+        await db
+          .update(subscriptions)
+          .set({
+            planId: targetPlan.id,
+            status: 'active',
+            expiryDate: oneYearExpiry,
+            ...customOverrides,
+            customOverrideReason: commercialTerms || notes || 'Super Admin approved customer upgrade request',
+          })
+          .where(eq(subscriptions.tenantId, enq.tenantId));
+      }
+
+      // Reactivate tenant
+      await db
+        .update(tenants)
+        .set({
+          status: 'active',
+          updatedAt: new Date(),
+        })
+        .where(eq(tenants.id, enq.tenantId));
+    }
+
+    // Update enquiry record in PostgreSQL
+    await db
+      .update(subscriptionEnquiries)
+      .set({
+        status: 'approved',
+        superAdminNotes: notes || enq.superAdminNotes || null,
+        commercialTerms: commercialTerms || enq.commercialTerms || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptionEnquiries.id, id));
+
+    // Audit log in database
+    await db.insert(activityLogs).values({
+      id: `log_${Date.now()}`,
+      tenantId: enq.tenantId || null,
+      actorId: 'usr_super_admin_01',
+      actorName: 'Super Administrator',
+      actorRole: 'super_admin',
+      action: 'UPGRADE_REQUEST_APPROVED',
+      category: 'subscription',
+      details: `Super Admin approved upgrade request for "${enq.tenantName}" to plan "${planName}". Library access reactivated.`,
+    });
+
+    const updatedEnq = await db.select().from(subscriptionEnquiries).where(eq(subscriptionEnquiries.id, id)).limit(1);
+
+    res.json({
+      success: true,
+      enquiry: updatedEnq[0],
+      tenantName,
+      planName,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/super-admin/enquiries/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    await db
+      .update(subscriptionEnquiries)
+      .set({
+        status: 'rejected',
+        superAdminNotes: notes || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(subscriptionEnquiries.id, id));
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- INVITATION TOKEN ACCEPTANCE API ---
 app.get('/api/invitations/:token', async (req, res) => {
   try {
@@ -1907,6 +2027,60 @@ async function seedDatabaseIfEmpty() {
           shelfLocation: c.shelfLocation,
           addedAt: new Date(c.addedAt),
         }).onConflictDoNothing({ target: bookCopies.id });
+      }
+    }
+
+    // 8. Subscription Upgrade Enquiries
+    const enqRows = await db.select().from(subscriptionEnquiries).limit(1);
+    if (!enqRows.length) {
+      const allT = await db.select().from(tenants);
+      const apex = allT.find((t) => t.id === 'ten_apex_college') || allT[0];
+      const second = allT.length > 1 ? (allT[1].id !== apex?.id ? allT[1] : allT[2] || allT[0]) : null;
+
+      if (apex) {
+        const seedItems: any[] = [
+          {
+            id: 'enq_apex_01',
+            tenantId: apex.id,
+            tenantSlug: apex.slug,
+            tenantName: apex.name,
+            contactName: 'Prof. Rajesh Sharma',
+            contactEmail: 'rajesh.sharma@apex.edu',
+            contactPhone: '+91 98765 43210',
+            requestedPlan: 'premium',
+            estimatedTitles: 5000,
+            estimatedCopies: 8000,
+            estimatedLibrarians: 5,
+            estimatedStudents: 850,
+            estimatedStorageMb: 2048,
+            message: 'Our semester intake has doubled. We request tier upgrade to Premium with 5,000 title quota and 5 librarians.',
+            status: 'pending',
+            createdAt: new Date(Date.now() - 3600 * 1000 * 4),
+          },
+        ];
+
+        if (second && second.id !== apex.id) {
+          seedItems.push({
+            id: 'enq_second_02',
+            tenantId: second.id,
+            tenantSlug: second.slug,
+            tenantName: second.name,
+            contactName: 'Dr. Anita Desai',
+            contactEmail: 'a.desai@library.ac.in',
+            contactPhone: '+91 98230 11223',
+            requestedPlan: 'standard',
+            estimatedTitles: 4000,
+            estimatedCopies: 6000,
+            estimatedLibrarians: 3,
+            estimatedStudents: 600,
+            estimatedStorageMb: 1024,
+            message: 'Free trial approaching expiry. Requesting approval to activate Standard Plan for entire academic branch.',
+            status: 'pending',
+            createdAt: new Date(Date.now() - 3600 * 1000 * 12),
+          });
+        }
+
+        await db.insert(subscriptionEnquiries).values(seedItems).onConflictDoNothing({ target: subscriptionEnquiries.id });
       }
     }
   } catch (err: any) {

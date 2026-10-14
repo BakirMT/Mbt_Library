@@ -330,4 +330,64 @@ export const apiClient = {
     if (!res.ok) throw new Error('Failed to fetch plans');
     return res.json();
   },
+
+  // --- UPGRADE REQUESTS & ENQUIRIES ---
+  async getSuperAdminEnquiries() {
+    const res = await fetch('/api/super-admin/enquiries');
+    if (!res.ok) throw new Error('Failed to fetch upgrade enquiries');
+    return res.json();
+  },
+
+  async submitUpgradeEnquiry(payload: {
+    tenantId?: string;
+    tenantSlug?: string;
+    tenantName: string;
+    contactName: string;
+    contactEmail: string;
+    contactPhone?: string;
+    requestedPlan?: string;
+    estimatedTitles?: number;
+    estimatedCopies?: number;
+    estimatedLibrarians?: number;
+    estimatedStudents?: number;
+    estimatedStorageMb?: number;
+    message?: string;
+  }) {
+    const res = await fetch('/api/enquiries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to submit upgrade enquiry');
+    }
+    return data;
+  },
+
+  async approveUpgradeEnquiry(enquiryId: string, payload?: { notes?: string; commercialTerms?: string }) {
+    const res = await fetch(`/api/super-admin/enquiries/${encodeURIComponent(enquiryId)}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to approve upgrade request');
+    }
+    return data;
+  },
+
+  async rejectUpgradeEnquiry(enquiryId: string, notes?: string) {
+    const res = await fetch(`/api/super-admin/enquiries/${encodeURIComponent(enquiryId)}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to reject upgrade request');
+    }
+    return data;
+  },
 };

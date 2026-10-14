@@ -57,14 +57,14 @@ export const LoginAuthPage: React.FC = () => {
                 <h3 className="font-bold text-white text-sm sm:text-base">Tenant Library Access</h3>
               </div>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Search your library by slug (e.g. <code className="text-blue-400 font-mono">darul-irfan</code>) or name to open your institution&apos;s portal.
+                Search your library by slug (e.g. <code className="text-blue-400 font-mono">college-name</code>) or name to open your institution&apos;s portal.
               </p>
               <form onSubmit={handleGoToTenant} className="space-y-3">
                 <input
                   type="text"
                   value={slugQuery}
                   onChange={(e) => setSlugQuery(e.target.value)}
-                  placeholder="Enter library slug or name..."
+                  placeholder="Enter library slug (e.g. college-name) or name..."
                   className="w-full px-4 py-2.5 sm:py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
                 />
                 <button

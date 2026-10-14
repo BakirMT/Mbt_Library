@@ -38,17 +38,29 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   React.useEffect(() => {
-    saasStorage.syncSubscriptionEnquiriesFromApi().then((list) => {
-      setEnquiries(list);
-    }).catch(() => {});
+    const handleUpdate = () => {
+      setEnquiries(saasStorage.getSubscriptionEnquiries());
+    };
+    window.addEventListener('mbt_enquiries_updated', handleUpdate);
+
+    saasStorage
+      .syncSubscriptionEnquiriesFromApi()
+      .then((list) => {
+        setEnquiries(list);
+      })
+      .catch(() => {});
+
+    return () => window.removeEventListener('mbt_enquiries_updated', handleUpdate);
   }, []);
 
   const pendingEnquiries = enquiries.filter((e) => e.status === 'pending');
 
-  const handleQuickApprove = (enquiryId: string) => {
-    const res = saasStorage.approveSubscriptionEnquiry(enquiryId);
+  const handleQuickApprove = async (enquiryId: string) => {
+    const res = await saasStorage.approveSubscriptionEnquiryAsync(enquiryId);
     if (res.success) {
-      setActionFeedback(`Approved upgrade for "${res.tenantName}"! Subscription updated to ${res.planName} & library access reactivated.`);
+      setActionFeedback(
+        `Approved upgrade for "${res.tenantName}"! Subscription updated to ${res.planName} & library access reactivated in database.`
+      );
       setEnquiries(saasStorage.getSubscriptionEnquiries());
       setTimeout(() => setActionFeedback(null), 6000);
     }

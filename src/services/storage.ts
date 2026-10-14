@@ -2374,14 +2374,46 @@ class SaasStorageService {
         if (Array.isArray(data)) {
           const local = this.getSubscriptionEnquiries();
           const map = new Map<string, SubscriptionEnquiry>();
-          data.forEach((e: any) => map.set(e.id, e));
-          local.forEach((e: any) => {
-            if (!map.has(e.id)) map.set(e.id, e);
+          data.forEach((e: any) => {
+            const formatted: SubscriptionEnquiry = {
+              id: e.id,
+              tenantId: e.tenantId || e.tenant_id,
+              tenantSlug: e.tenantSlug || e.tenant_slug,
+              tenantName: e.tenantName || e.tenant_name || 'Library',
+              contactName: e.contactName || e.contact_name || 'Administrator',
+              contactEmail: e.contactEmail || e.contact_email || '',
+              contactPhone: e.contactPhone || e.contact_phone,
+              requestedPlan: e.requestedPlan || e.requested_plan || 'premium',
+              estimatedTitles: e.estimatedTitles ?? e.estimated_titles,
+              estimatedCopies: e.estimatedCopies ?? e.estimated_copies,
+              estimatedLibrarians: e.estimatedLibrarians ?? e.estimated_librarians,
+              estimatedStudents: e.estimatedStudents ?? e.estimated_students,
+              estimatedStorageMb: e.estimatedStorageMb ?? e.estimated_storage_mb,
+              message: e.message,
+              status: e.status || 'pending',
+              superAdminNotes: e.superAdminNotes || e.super_admin_notes,
+              commercialTerms: e.commercialTerms || e.commercial_terms,
+              createdAt: e.createdAt || e.created_at || new Date().toISOString(),
+              updatedAt: e.updatedAt || e.updated_at,
+            };
+            map.set(formatted.id, formatted);
           });
+
+          local.forEach((e: any) => {
+            if (!map.has(e.id)) {
+              map.set(e.id, e);
+            }
+          });
+
           const merged = Array.from(map.values()).sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );
           saveToStorage(STORAGE_KEYS.ENQUIRIES, merged);
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mbt_enquiries_updated', { detail: merged }));
+          }
+
           return merged;
         }
       }
@@ -2467,14 +2499,13 @@ class SaasStorageService {
     };
     saveToStorage(STORAGE_KEYS.ENQUIRIES, list);
 
-    // Sync enquiry status to backend
+    // Call backend approve endpoint directly
     try {
-      fetch(`/api/super-admin/enquiries/${enquiry.id}`, {
-        method: 'PATCH',
+      fetch(`/api/super-admin/enquiries/${encodeURIComponent(enquiry.id)}/approve`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status: 'approved',
-          superAdminNotes: notes || '',
+          notes: notes || '',
           commercialTerms: commercialTerms || '',
         }),
       }).catch(() => {});
@@ -2491,9 +2522,31 @@ class SaasStorageService {
       details: `Approved customer upgrade request for "${enquiry.tenantName}" to plan "${targetPlan.name}". Full library access reactivated.`,
     });
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mbt_enquiries_updated', { detail: list }));
+    }
+
     return { success: true, tenantName: enquiry.tenantName, planName: targetPlan.name };
+  }
+
+  async approveSubscriptionEnquiryAsync(
+    enquiryId: string,
+    notes?: string,
+    commercialTerms?: string
+  ): Promise<{ success: boolean; tenantName?: string; planName?: string }> {
+    const res = this.approveSubscriptionEnquiry(enquiryId, notes, commercialTerms);
+    try {
+      await fetch(`/api/super-admin/enquiries/${encodeURIComponent(enquiryId)}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes, commercialTerms }),
+      });
+      await this.syncSubscriptionEnquiriesFromApi();
+    } catch {}
+    return res;
   }
 }
 
 export const saasStorage = new SaasStorageService();
+export type { SubscriptionEnquiry } from '../types/saas';
 

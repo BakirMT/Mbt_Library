@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CreditCard,
   Search,
@@ -74,6 +74,16 @@ export const SubscriptionsManagementView: React.FC = () => {
   const [reviewEnquiry, setReviewEnquiry] = useState<SubscriptionEnquiry | null>(null);
   const [enquiryNotes, setEnquiryNotes] = useState('');
   const [enquiryCommercialTerms, setEnquiryCommercialTerms] = useState('');
+
+  useEffect(() => {
+    saasStorage
+      .syncSubscriptionEnquiriesFromApi()
+      .then(() => setRefreshNonce((n) => n + 1))
+      .catch(() => {});
+    const onUpdate = () => setRefreshNonce((n) => n + 1);
+    window.addEventListener('mbt_enquiries_updated', onUpdate);
+    return () => window.removeEventListener('mbt_enquiries_updated', onUpdate);
+  }, []);
 
   const tenants = saasStorage.getTenants();
   const subscriptions = saasStorage.getSubscriptions();
@@ -220,7 +230,7 @@ export const SubscriptionsManagementView: React.FC = () => {
   };
 
   const handleApproveEnquiryAsPremium = async (enquiry: SubscriptionEnquiry) => {
-    saasStorage.approveSubscriptionEnquiry(
+    await saasStorage.approveSubscriptionEnquiryAsync(
       enquiry.id,
       enquiryNotes,
       enquiryCommercialTerms
