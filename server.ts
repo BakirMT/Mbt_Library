@@ -298,18 +298,38 @@ app.post('/api/tenants/provision', async (req, res) => {
     const token = `mbt_adm_${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
     const now = new Date();
 
+    // Resolve target plan ID in PostgreSQL (support plan_free, plan_trial, or code match)
+    const allPlans = await db.select().from(subscriptionPlans);
+    let matchedPlan = allPlans.find((p) => p.id === payload.planId);
+    if (!matchedPlan) {
+      matchedPlan = allPlans.find(
+        (p) =>
+          p.code === payload.planId ||
+          (payload.planId === 'plan_free' && p.code === 'free') ||
+          (payload.planId === 'plan_trial' && p.code === 'free')
+      );
+    }
+    const resolvedPlanId = matchedPlan ? matchedPlan.id : allPlans[0].id;
+
     // Strict 3-day (72 hours) Free trial duration calculated on server timestamp
-    const isFreePlanOrTrial = payload.planId === 'plan_free' || payload.isTrial;
+    const isFreePlanOrTrial =
+      payload.planId === 'plan_free' || payload.planId === 'plan_trial' || payload.isTrial;
     const expiryDate = isFreePlanOrTrial
       ? new Date(now.getTime() + 72 * 60 * 60 * 1000)
-      : new Date(now.getTime() + (payload.billingCycle === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000);
+      : new Date(
+          now.getTime() +
+            (payload.billingCycle === 'annual' ? 365 : 30) * 24 * 60 * 60 * 1000
+        );
 
-    const initials = payload.name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w: string) => w[0].toUpperCase())
-      .join('') || 'LB';
+    const initials =
+      payload.name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w: string) => w[0].toUpperCase())
+        .join('') || 'LB';
+
+    let finalAdminUserId = adminUserId;
 
     await db.transaction(async (tx) => {
       // 1. Set RLS tenant context for transaction connection
@@ -339,32 +359,45 @@ app.post('/api/tenants/provision', async (req, res) => {
         },
       });
 
-      // 3. Insert Admin User
-      await tx.insert(users).values({
-        id: adminUserId,
-        email: payload.adminEmail.trim().toLowerCase(),
-        fullName: payload.adminFullName.trim(),
-        phone: payload.adminPhone.trim(),
-        staffId: payload.adminStaffId?.trim(),
-        isSuperAdmin: false,
-        isActive: true,
-      });
+      // 3. Insert or link Admin User
+      const existingUser = await tx
+        .select()
+        .from(users)
+        .where(eq(users.email, payload.adminEmail.trim().toLowerCase()))
+        .limit(1);
+
+      if (existingUser.length) {
+        finalAdminUserId = existingUser[0].id;
+      } else {
+        await tx.insert(users).values({
+          id: adminUserId,
+          email: payload.adminEmail.trim().toLowerCase(),
+          fullName: payload.adminFullName.trim(),
+          phone: payload.adminPhone?.trim() || null,
+          staffId: payload.adminStaffId?.trim() || null,
+          isSuperAdmin: false,
+          isActive: true,
+        });
+      }
 
       // 4. Insert Membership
-      await tx.insert(tenantMemberships).values({
-        id: `mem_${tenantId}_admin`,
-        tenantId,
-        userId: adminUserId,
-        role: 'library_admin',
-        joinedAt: new Date(),
-        isActive: true,
-      }).onConflictDoNothing({ target: tenantMemberships.id });
+      await tx
+        .insert(tenantMemberships)
+        .values({
+          id: `mem_${tenantId}_admin`,
+          tenantId,
+          userId: finalAdminUserId,
+          role: 'library_admin',
+          joinedAt: new Date(),
+          isActive: true,
+        })
+        .onConflictDoNothing({ target: tenantMemberships.id });
 
       // 5. Insert Subscription
       await tx.insert(subscriptions).values({
         id: subId,
         tenantId,
-        planId: payload.planId,
+        planId: resolvedPlanId,
         status: payload.isTrial ? 'trial' : 'active',
         billingCycle: payload.billingCycle || 'monthly',
         expiryDate,
@@ -375,7 +408,11 @@ app.post('/api/tenants/provision', async (req, res) => {
         customMaxLibrarians: payload.customMaxLibrarians,
         customMaxStudents: payload.customMaxStudents,
         customMaxStorageMb: payload.customMaxStorageMb,
-        customOverrideReason: payload.customOverrideReason || (payload.customLimitsEnabled ? 'Initial custom limits configured during library provisioning' : undefined),
+        customOverrideReason:
+          payload.customOverrideReason ||
+          (payload.customLimitsEnabled
+            ? 'Initial custom limits configured during library provisioning'
+            : undefined),
       });
 
       // 6. Generate Invitation Token
@@ -401,7 +438,7 @@ app.post('/api/tenants/provision', async (req, res) => {
         actorRole: 'super_admin',
         action: 'TENANT_PROVISIONED',
         category: 'provisioning',
-        details: `Provisioned "${payload.name}" with plan ${payload.planId}. Admin invited: ${payload.adminEmail}.`,
+        details: `Provisioned "${payload.name}" with plan ${resolvedPlanId}. Admin invited: ${payload.adminEmail}.`,
       });
     });
 
@@ -411,6 +448,25 @@ app.post('/api/tenants/provision', async (req, res) => {
       slug: cleanSlug,
       invitationToken: token,
       invitationUrl: `/invite/${token}`,
+      tenant: {
+        id: tenantId,
+        slug: cleanSlug,
+        name: payload.name.trim(),
+        institutionName: payload.institutionName.trim(),
+        status: payload.isTrial ? 'trial' : 'active',
+      },
+      subscription: {
+        id: subId,
+        tenantId,
+        planId: resolvedPlanId,
+        status: payload.isTrial ? 'trial' : 'active',
+        expiryDate: expiryDate.toISOString(),
+      },
+      adminUser: {
+        id: finalAdminUserId,
+        email: payload.adminEmail.trim().toLowerCase(),
+        fullName: payload.adminFullName.trim(),
+      },
     });
   } catch (err: any) {
     console.error('Provisioning error:', err);
