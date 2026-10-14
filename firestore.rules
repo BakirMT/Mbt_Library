@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.isSuperAdmin == true;
+    }
+
+    function hasTenantRole(tenantSlug) {
+      return isAuthenticated() && request.auth.token.tenantSlug == tenantSlug;
+    }
+
+    // OTP Challenges - Backend Server Only access
+    match /otp_challenges/{challengeId} {
+      allow read, write: if false; // Only manageable via Firebase Admin SDK backend
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) || isSuperAdmin();
+    }
+
+    // Tenants & Libraries
+    match /tenants/{tenantId} {
+      allow read: if true; // Public directory read for tenant lookup
+      allow write: if isSuperAdmin();
+    }
+
+    // Activity & Audit Logs
+    match /activity_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Written only by backend system
+    }
+
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

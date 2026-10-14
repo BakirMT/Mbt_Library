@@ -16,6 +16,7 @@ import {
 import { Tenant, UserRole } from '../../types/saas';
 import { useRouter } from '../../router/RouterContext';
 import { saasStorage } from '../../services/storage';
+import { authenticateWithCustomToken } from '../../lib/firebase';
 
 interface TenantLoginProps {
   tenant: Tenant;
@@ -43,6 +44,14 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForgotTip, setShowForgotTip] = useState(false);
 
+  const [authMode, setAuthMode] = useState<'password' | 'otp'>('password');
+  const [otpDestination, setOtpDestination] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [otpNotice, setOtpNotice] = useState<string | null>(null);
+  const [devOtp, setDevOtp] = useState<string | null>(null);
+
   const brandColor = tenant.settings.primaryColor || '#2563eb';
 
   const roleTitle =
@@ -68,7 +77,7 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
       ? `/l/${tenant.slug}/librarian`
       : `/l/${tenant.slug}/student`;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmitPassword = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsSubmitting(true);
@@ -83,9 +92,83 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
     }
   };
 
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpDestination.trim()) {
+      setError('Please enter your registered Gmail Email Address.');
+      return;
+    }
+    setError(null);
+    setOtpNotice(null);
+    setSendingOtp(true);
+
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: otpDestination.trim(),
+          tenantSlug: tenant.slug,
+          role,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to dispatch email verification code');
+
+      setOtpSent(true);
+      setOtpNotice(data.message || '6-digit verification code dispatched to your email.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to send email verification code.');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCode = otpCode.trim();
+    if (!cleanCode || cleanCode.length < 6) {
+      setError('Please enter the 6-digit verification code.');
+      return;
+    }
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: otpDestination.trim(),
+          otpCode: cleanCode,
+          tenantSlug: tenant.slug,
+          role,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid or expired verification code');
+
+      // Exchange Firebase custom token
+      if (data.customToken) {
+        await authenticateWithCustomToken(data.customToken);
+      }
+
+      // Automatically sign in user for this tenant session
+      loginTenantUser(tenant.slug, data.user?.email || otpDestination, 'Password123!', userRole);
+      navigate(targetPortalRoute);
+    } catch (err: any) {
+      setError(err?.message || 'Invalid or expired verification code');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleQuickFill = (targetEmail: string) => {
     setEmail(targetEmail);
     setPassword('Password123!');
+    setOtpDestination(targetEmail);
     setError(null);
   };
 
@@ -132,6 +215,25 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
           </div>
 
           <div className="p-6 sm:p-7 space-y-4">
+            {/* Mode Switcher */}
+            <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold text-slate-600">
+              <button
+                type="button"
+                onClick={() => { setAuthMode('password'); setError(null); }}
+                className={`py-2 rounded-lg transition-all cursor-pointer ${authMode === 'password' ? 'bg-white text-blue-600 shadow-sm' : 'hover:text-slate-900'}`}
+              >
+                Password Login
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('otp'); setError(null); }}
+                className={`py-2 rounded-lg transition-all cursor-pointer flex items-center justify-center space-x-1 ${authMode === 'otp' ? 'bg-white text-blue-600 shadow-sm' : 'hover:text-slate-900'}`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>OTP Verification</span>
+              </button>
+            </div>
+
             {error && (
               <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm flex items-start space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -139,63 +241,156 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block font-semibold text-slate-700 text-xs sm:text-sm mb-1.5">
-                  Registered Institutional Email
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="user@institution.edu"
-                    className="w-full pl-10 pr-3 py-2.5 sm:py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                    required
-                  />
+            {authMode === 'password' ? (
+              <form onSubmit={handleSubmitPassword} className="space-y-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 text-xs sm:text-sm mb-1.5">
+                    Registered Institutional Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@institution.edu"
+                      className="w-full pl-10 pr-3 py-2.5 sm:py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="font-semibold text-slate-700 text-xs sm:text-sm">Account Password</label>
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotTip((prev) => !prev)}
-                    className="text-xs text-blue-600 hover:text-blue-800 cursor-pointer"
-                  >
-                    Forgot password?
-                  </button>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="font-semibold text-slate-700 text-xs sm:text-sm">Account Password</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotTip((prev) => !prev)}
+                      className="text-xs text-blue-600 hover:text-blue-800 cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  {showForgotTip && (
+                    <div className="mb-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs leading-relaxed">
+                      Password reset for this tenant is initiated by the Library Admin or Super Admin via secure invitation tokens. Default test credentials use <strong>Password123!</strong>
+                    </div>
+                  )}
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-10 pr-3 py-2.5 sm:py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                      required
+                    />
+                  </div>
                 </div>
-                {showForgotTip && (
-                  <div className="mb-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs leading-relaxed">
-                    Password reset for this tenant is initiated by the Library Admin or Super Admin via secure invitation tokens. Default test credentials use <strong>Password123!</strong>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-3 sm:py-3.5 text-white font-bold text-sm rounded-xl shadow-sm flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                  style={{ backgroundColor: brandColor }}
+                >
+                  <span>{isSubmitting ? 'Authenticating...' : `Sign In as ${role === 'admin' ? 'Library Admin' : role === 'librarian' ? 'Librarian' : 'Student'}`}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+            ) : (
+              /* OTP Verification Form */
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center space-x-2 font-semibold">
+                  <Mail className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>Gmail OTP Verification Active</span>
+                </div>
+
+                {otpNotice && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs space-y-1">
+                    <div className="flex items-center space-x-1.5 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{otpNotice}</span>
+                    </div>
+                    {devOtp && (
+                      <div className="font-mono text-[11px] text-emerald-900 bg-emerald-100/80 p-1.5 rounded mt-1">
+                        Development Verification Code: <strong>{devOtp}</strong>
+                      </div>
+                    )}
                   </div>
                 )}
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-10 pr-3 py-2.5 sm:py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-                    required
-                  />
-                </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-3 sm:py-3.5 text-white font-bold text-sm rounded-xl shadow-sm flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                style={{ backgroundColor: brandColor }}
-              >
-                <span>{isSubmitting ? 'Authenticating...' : `Sign In as ${role === 'admin' ? 'Library Admin' : role === 'librarian' ? 'Librarian' : 'Student'}`}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
+                {!otpSent ? (
+                  <form onSubmit={handleSendOtp} className="space-y-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 text-xs mb-1">
+                        Registered Gmail / Email Address
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={otpDestination}
+                        onChange={(e) => setOtpDestination(e.target.value)}
+                        placeholder="user@gmail.com or user@institution.edu"
+                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={sendingOtp}
+                      className="w-full py-3 text-white font-bold text-sm rounded-xl shadow-sm flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                      style={{ backgroundColor: brandColor }}
+                    >
+                      <span>{sendingOtp ? 'Sending Code...' : 'Send OTP to Gmail'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyOtp} className="space-y-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 text-xs mb-1">
+                        Enter 6-Digit OTP Code
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value)}
+                        placeholder="123456"
+                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-center text-lg font-mono tracking-widest outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setOtpSent(false)}
+                        className="text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                      >
+                        ← Change Number / Email
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        className="text-blue-600 font-semibold hover:underline cursor-pointer"
+                      >
+                        Resend OTP
+                      </button>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full py-3 text-white font-bold text-sm rounded-xl shadow-sm flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                      style={{ backgroundColor: brandColor }}
+                    >
+                      <span>{isSubmitting ? 'Verifying OTP...' : 'Verify OTP & Sign In'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
 
             {/* 1-Click Demo Sign-in Fast Fill */}
             <div className="pt-3 border-t border-slate-100">

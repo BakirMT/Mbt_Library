@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../router/RouterContext';
 import { PublicNavbar } from './PublicNavbar';
 import { PublicFooter } from './PublicFooter';
-import { ShieldCheck, ArrowRight, Mail, Phone, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
-import { saasStorage } from '../../services/storage';
+import { ShieldCheck, ArrowRight, Mail, CheckCircle2, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
+import { authenticateWithCustomToken } from '../../lib/firebase';
 
 export const VerifyOtpPage: React.FC = () => {
   const { navigate } = useRouter();
@@ -12,81 +12,99 @@ export const VerifyOtpPage: React.FC = () => {
   const mobile = urlParams.get('mobile') || sessionStorage.getItem('mbt_reg_mobile') || '';
   const planId = urlParams.get('plan') || sessionStorage.getItem('mbt_reg_plan') || 'plan_free';
 
-  const devEmailOtp = sessionStorage.getItem('mbt_dev_email_otp') || '';
-  const devMobileOtp = sessionStorage.getItem('mbt_dev_mobile_otp') || '';
-
-  const [emailOtp, setEmailOtp] = useState(devEmailOtp);
-  const [mobileOtp, setMobileOtp] = useState(devMobileOtp);
-
+  const [emailOtp, setEmailOtp] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
-  const [mobileVerified, setMobileVerified] = useState(false);
-
-  const [emailToken, setEmailToken] = useState('');
-  const [mobileToken, setMobileToken] = useState('');
-
   const [loadingEmail, setLoadingEmail] = useState(false);
-  const [loadingMobile, setLoadingMobile] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(60);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!email || !mobile) {
+    if (!email) {
       navigate('/auth/register');
     }
-  }, [email, mobile, navigate]);
+  }, [email, navigate]);
+
+  // Resend Countdown Timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
 
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailOtp) return;
+    const cleanCode = emailOtp.trim();
+    if (cleanCode.length !== 6) {
+      setError('Please enter a 6-digit verification code.');
+      return;
+    }
+
     setError(null);
+    setNoticeMessage(null);
     setLoadingEmail(true);
 
     try {
       const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: email, type: 'email', otp: emailOtp }),
+        body: JSON.stringify({ email, otpCode: cleanCode }),
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Invalid email OTP');
+      if (!res.ok) {
+        throw new Error(data.error || 'Invalid or expired verification code.');
+      }
+
+      // Genuine Firebase Authentication Custom Token Exchange
+      if (data.customToken) {
+        await authenticateWithCustomToken(data.customToken);
+      }
 
       setEmailVerified(true);
-      setEmailToken(data.verifiedToken);
-      sessionStorage.setItem('mbt_verified_email_token', data.verifiedToken);
+      sessionStorage.setItem('mbt_verified_email_token', data.customToken || 'verified_email');
+      setNoticeMessage('Email verified successfully with Firebase Authentication!');
     } catch (err: any) {
-      setError(err?.message || 'Email OTP verification failed');
+      setError(err?.message || 'Invalid or expired verification code.');
     } finally {
       setLoadingEmail(false);
     }
   };
 
-  const handleVerifyMobile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mobileOtp) return;
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || resending) return;
+
     setError(null);
-    setLoadingMobile(true);
+    setNoticeMessage(null);
+    setResending(true);
 
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: mobile, type: 'mobile', otp: mobileOtp }),
+        body: JSON.stringify({ email }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Invalid mobile OTP');
 
-      setMobileVerified(true);
-      setMobileToken(data.verifiedToken);
-      sessionStorage.setItem('mbt_verified_mobile_token', data.verifiedToken);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to resend verification email.');
+      }
+
+      setResendCooldown(data.cooldownSeconds || 60);
+      setNoticeMessage(data.message || 'A new 6-digit code has been sent to your email.');
     } catch (err: any) {
-      setError(err?.message || 'Mobile OTP verification failed');
+      setError(err?.message || 'Failed to resend email code. Please try again.');
     } finally {
-      setLoadingMobile(false);
+      setResending(false);
     }
   };
 
   const handleProceed = () => {
-    if (!emailVerified || !mobileVerified) {
-      setError('Please verify both your email address and mobile number to proceed.');
+    if (!emailVerified) {
+      setError('Please verify your email address to proceed.');
       return;
     }
     navigate(`/subscription/checkout?email=${encodeURIComponent(email)}&mobile=${encodeURIComponent(mobile)}&plan=${planId}`);
@@ -99,15 +117,15 @@ export const VerifyOtpPage: React.FC = () => {
       <main className="flex-1 py-16 sm:py-24 flex items-center justify-center p-4">
         <div className="max-w-xl w-full bg-slate-950 p-8 sm:p-10 rounded-3xl border border-slate-800 shadow-2xl space-y-8">
           <div className="space-y-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400">
-              Step 2 of 3: OTP Verification
+            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400 flex items-center space-x-1.5">
+              <ShieldCheck className="w-4 h-4 text-blue-400" />
+              <span>Step 2 of 3: Email OTP Verification</span>
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              Verify Email & Mobile Number
+              Verify Your Email Address
             </h1>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Enter the 6-digit OTP codes sent to <strong>{email}</strong> and <strong>{mobile}</strong>.
-              {devEmailOtp && <span className="block mt-1 text-emerald-400 font-mono text-[11px]">Development Mode OTPs — Email: {devEmailOtp} | Mobile: {devMobileOtp}</span>}
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              We have sent a production 6-digit verification code to <strong>{email}</strong> via Resend.
             </p>
           </div>
 
@@ -118,9 +136,15 @@ export const VerifyOtpPage: React.FC = () => {
             </div>
           )}
 
+          {noticeMessage && (
+            <div className="p-3.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-semibold flex items-center space-x-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{noticeMessage}</span>
+            </div>
+          )}
+
           <div className="space-y-6">
-            {/* Email Verification Box */}
-            <div className="bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-800 space-y-3.5">
+            <div className="bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-800 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Mail className="w-4 h-4 text-blue-400 shrink-0" />
@@ -132,77 +156,68 @@ export const VerifyOtpPage: React.FC = () => {
                   </span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                    Unverified
+                    Pending Verification
                   </span>
                 )}
               </div>
 
               {!emailVerified ? (
-                <form onSubmit={handleVerifyEmail} className="flex flex-col sm:flex-row gap-2.5">
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={emailOtp}
-                    onChange={(e) => setEmailOtp(e.target.value)}
-                    placeholder="6-digit Email OTP"
-                    className="flex-1 px-4 py-2.5 sm:py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white font-mono tracking-widest outline-none focus:border-blue-500 transition-colors"
-                  />
-                  <button
-                    type="submit"
-                    disabled={loadingEmail || emailOtp.length < 6}
-                    className="px-5 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50 shrink-0"
-                  >
-                    {loadingEmail ? 'Verifying...' : 'Verify Email'}
-                  </button>
+                <form onSubmit={handleVerifyEmail} className="space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      value={emailOtp}
+                      onChange={(e) => setEmailOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="Enter 6-digit code"
+                      className="flex-1 px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-center sm:text-left text-lg font-mono font-bold tracking-[6px] text-white outline-none focus:border-blue-500 transition-colors"
+                    />
+                    <button
+                      type="submit"
+                      disabled={loadingEmail || emailOtp.length < 6}
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50 shrink-0 flex items-center justify-center space-x-2"
+                    >
+                      {loadingEmail ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Verifying...</span>
+                        </>
+                      ) : (
+                        <span>Verify Code</span>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 text-xs text-slate-400">
+                    <span>Didn&apos;t receive the code?</span>
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={resendCooldown > 0 || resending}
+                      className="text-blue-400 hover:underline disabled:text-slate-500 cursor-pointer disabled:cursor-not-allowed font-semibold flex items-center space-x-1"
+                    >
+                      {resending ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Sending...</span>
+                        </>
+                      ) : resendCooldown > 0 ? (
+                        <span>Resend in {resendCooldown}s</span>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Resend Code</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </form>
               ) : (
-                <div className="text-xs sm:text-sm text-emerald-300 font-semibold flex items-center space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Email successfully verified and cryptographically bound.</span>
-                </div>
-              )}
-            </div>
-
-            {/* Mobile Verification Box */}
-            <div className="bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-800 space-y-3.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span className="text-xs sm:text-sm font-bold text-white">Mobile Verification ({mobile})</span>
-                </div>
-                {mobileVerified ? (
-                  <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    Verified ✓
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                    Unverified
-                  </span>
-                )}
-              </div>
-
-              {!mobileVerified ? (
-                <form onSubmit={handleVerifyMobile} className="flex flex-col sm:flex-row gap-2.5">
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={mobileOtp}
-                    onChange={(e) => setMobileOtp(e.target.value)}
-                    placeholder="6-digit Mobile OTP"
-                    className="flex-1 px-4 py-2.5 sm:py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white font-mono tracking-widest outline-none focus:border-emerald-500 transition-colors"
-                  />
-                  <button
-                    type="submit"
-                    disabled={loadingMobile || mobileOtp.length < 6}
-                    className="px-5 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50 shrink-0"
-                  >
-                    {loadingMobile ? 'Verifying...' : 'Verify Mobile'}
-                  </button>
-                </form>
-              ) : (
-                <div className="text-xs sm:text-sm text-emerald-300 font-semibold flex items-center space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Mobile number successfully verified and bound.</span>
+                <div className="text-xs sm:text-sm text-emerald-300 font-semibold flex items-center space-x-2 bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/50">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <span>Email authenticated & identity verified with Firebase Authentication.</span>
                 </div>
               )}
             </div>
@@ -213,12 +228,12 @@ export const VerifyOtpPage: React.FC = () => {
               onClick={() => navigate('/auth/register')}
               className="text-xs sm:text-sm text-slate-400 hover:text-white cursor-pointer underline order-2 sm:order-1"
             >
-              ← Change Email or Mobile
+              ← Change Email Address
             </button>
 
             <button
               onClick={handleProceed}
-              disabled={!emailVerified || !mobileVerified}
+              disabled={!emailVerified}
               className="w-full sm:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-blue-900/30 flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95 disabled:opacity-40 order-1 sm:order-2"
             >
               <span>Proceed to Library Details</span>

@@ -76,6 +76,7 @@ export interface TenantSettings {
   finePerDay: number;
   contactEmail: string;
   contactPhone: string;
+  contactName?: string;
   address: string;
   websiteUrl?: string;
 }

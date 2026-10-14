@@ -84,56 +84,6 @@ export const apiClient = {
     return data;
   },
 
-  async createInvitation(payload: {
-    tenantId: string;
-    recipientEmail: string;
-    recipientName: string;
-    role: string;
-    deliveryMethod?: string;
-  }) {
-    const res = await fetch('/api/invitations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to create invitation');
-    }
-    return data;
-  },
-
-  async revokeInvitation(invitationId: string) {
-    const res = await fetch(`/api/invitations/${encodeURIComponent(invitationId)}/revoke`, {
-      method: 'POST',
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to revoke invitation');
-    }
-    return data;
-  },
-
-  // --- BILLING & INVOICES ---
-  async getInvoices() {
-    const res = await fetch('/api/invoices');
-    if (!res.ok) throw new Error('Failed to fetch invoices');
-    return res.json();
-  },
-
-  async payInvoice(invoiceId: string, payload: { paymentMethod?: string; transactionReference?: string; notes?: string }) {
-    const res = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/pay`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to record invoice payment');
-    }
-    return data;
-  },
-
   // --- CATALOGUE & BOOKS ---
   async getBooks(slug: string) {
     const res = await fetch(`/api/tenants/${encodeURIComponent(slug)}/books`);

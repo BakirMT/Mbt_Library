@@ -49,12 +49,11 @@ export const LoginAuthPage: React.FC = () => {
           )}
 
           <div className="space-y-4">
-
             {/* Tenant Library Search */}
             <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-3">
               <div className="flex items-center space-x-2">
                 <Building2 className="w-5 h-5 text-blue-400 shrink-0" />
-                <h3 className="font-bold text-white text-sm sm:text-base">Tenant Library Access</h3>
+                <h3 className="font-bold text-white text-sm sm:text-base">Tenant Library Search</h3>
               </div>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 Search your library by slug (e.g. <code className="text-blue-400 font-mono">college-name</code>) or name to open your institution&apos;s portal.
@@ -75,6 +74,33 @@ export const LoginAuthPage: React.FC = () => {
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
+            </div>
+
+            {/* Quick Portal Direct Login Shortcuts */}
+            <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800/80 space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Quick Portal Direct Logins
+              </span>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <button
+                  onClick={() => navigate('/l/apex-college/admin/login')}
+                  className="p-2 bg-slate-800/80 hover:bg-slate-700/80 rounded-xl text-blue-300 font-semibold cursor-pointer text-center truncate"
+                >
+                  Admin Login
+                </button>
+                <button
+                  onClick={() => navigate('/l/apex-college/librarian/login')}
+                  className="p-2 bg-slate-800/80 hover:bg-slate-700/80 rounded-xl text-emerald-300 font-semibold cursor-pointer text-center truncate"
+                >
+                  Librarian Login
+                </button>
+                <button
+                  onClick={() => navigate('/l/apex-college/student/login')}
+                  className="p-2 bg-slate-800/80 hover:bg-slate-700/80 rounded-xl text-purple-300 font-semibold cursor-pointer text-center truncate"
+                >
+                  Student Login
+                </button>
+              </div>
             </div>
           </div>
 

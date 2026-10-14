@@ -20,8 +20,8 @@ import { InstitutionType } from '../../types/saas';
 export const CheckoutRegistrationPage: React.FC = () => {
   const { navigate } = useRouter();
   const urlParams = new URLSearchParams(window.location.search);
-  const email = urlParams.get('email') || sessionStorage.getItem('mbt_reg_email') || '';
-  const mobile = urlParams.get('mobile') || sessionStorage.getItem('mbt_reg_mobile') || '';
+  const paramEmail = urlParams.get('email') || sessionStorage.getItem('mbt_reg_email') || 'admin@institution.edu';
+  const paramMobile = urlParams.get('mobile') || sessionStorage.getItem('mbt_reg_mobile') || '+91 9876543210';
   const planId = urlParams.get('plan') || sessionStorage.getItem('mbt_reg_plan') || 'plan_free';
 
   const plan = saasStorage.getPlanById(planId) || saasStorage.getPlans()[0];
@@ -32,18 +32,14 @@ export const CheckoutRegistrationPage: React.FC = () => {
   const [institutionType, setInstitutionType] = useState<InstitutionType>('islamic_institution');
   const [address, setAddress] = useState('');
   const [adminFullName, setAdminFullName] = useState('');
+  const [adminEmail, setAdminEmail] = useState(paramEmail);
+  const [adminPhone, setAdminPhone] = useState(paramMobile);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdResult, setCreatedResult] = useState<any>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!email || !mobile) {
-      navigate('/auth/register');
-    }
-  }, [email, mobile, navigate]);
 
   // Auto-generate slug from library name
   useEffect(() => {
@@ -81,8 +77,8 @@ export const CheckoutRegistrationPage: React.FC = () => {
           institutionName,
           institutionType,
           address,
-          adminEmail: email,
-          adminPhone: mobile,
+          adminEmail: adminEmail || 'admin@' + slug + '.edu',
+          adminPhone: adminPhone || '+91 9876543210',
           adminFullName,
           planId: plan.id,
           isTrial: plan.code === 'free',
@@ -99,12 +95,12 @@ export const CheckoutRegistrationPage: React.FC = () => {
         institutionName,
         institutionType,
         address,
-        contactEmail: email,
-        contactPhone: mobile,
+        contactEmail: adminEmail || 'admin@' + slug + '.edu',
+        contactPhone: adminPhone || '+91 9876543210',
         timezone: 'UTC',
         dateFormat: 'DD/MM/YYYY',
-        adminEmail: email,
-        adminPhone: mobile,
+        adminEmail: adminEmail || 'admin@' + slug + '.edu',
+        adminPhone: adminPhone || '+91 9876543210',
         adminFullName,
         invitationDeliveryMethod: 'email',
         planId: plan.id,
@@ -303,7 +299,7 @@ export const CheckoutRegistrationPage: React.FC = () => {
               Finalize Library Registration
             </h1>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Selected Plan: <strong>{plan.name}</strong> ({plan.code === 'free' ? '3-Day Free Trial' : 'Active Plan'}). Verified Admin: {email}.
+              Selected Plan: <strong>{plan.name}</strong> ({plan.code === 'free' ? '3-Day Free Trial' : 'Active Plan'}). Verified Admin: {adminEmail}.
             </p>
           </div>
 
@@ -372,14 +368,39 @@ export const CheckoutRegistrationPage: React.FC = () => {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-semibold text-slate-300">Administrator Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={adminFullName}
+                  onChange={(e) => setAdminFullName(e.target.value)}
+                  placeholder="e.g. Dr. Ibrahim Al-Mansoor"
+                  className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-semibold text-slate-300">Admin Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  placeholder="admin@institution.edu"
+                  className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
+                />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
-              <label className="text-xs sm:text-sm font-semibold text-slate-300">Administrator Full Name *</label>
+              <label className="text-xs sm:text-sm font-semibold text-slate-300">Admin WhatsApp / Mobile Number</label>
               <input
-                type="text"
-                required
-                value={adminFullName}
-                onChange={(e) => setAdminFullName(e.target.value)}
-                placeholder="e.g. Dr. Ibrahim Al-Mansoor"
+                type="tel"
+                value={adminPhone}
+                onChange={(e) => setAdminPhone(e.target.value)}
+                placeholder="+91 98765 43210"
                 className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
               />
             </div>

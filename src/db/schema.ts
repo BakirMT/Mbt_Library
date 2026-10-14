@@ -294,6 +294,19 @@ export const activityLogs = pgTable('activity_logs', {
   timestamp: timestamp('timestamp').defaultNow(),
 });
 
+// --- OTP VERIFICATIONS TABLE (WhatsApp & Gmail OTP) ---
+export const otpVerifications = pgTable('otp_verifications', {
+  id: text('id').primaryKey(),
+  destination: text('destination').notNull(),
+  channel: text('channel').notNull(), // 'whatsapp' | 'gmail'
+  otpCode: text('otp_code').notNull(),
+  tenantSlug: text('tenant_slug'),
+  role: text('role'),
+  isConsumed: boolean('is_consumed').default(false),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 // --- RELATIONS ---
 export const tenantsRelations = relations(tenants, ({ one, many }) => ({
   subscriptions: many(subscriptions),

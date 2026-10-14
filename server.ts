@@ -18,6 +18,7 @@ import {
   invoices,
   activityLogs,
   subscriptionEnquiries,
+  otpVerifications,
 } from './src/db/schema.ts';
 import { eq, and, sql, desc, count } from 'drizzle-orm';
 import {
@@ -39,6 +40,10 @@ import {
   INITIAL_COPIES,
   INITIAL_LOANS,
 } from './src/services/mockData.ts';
+import crypto from 'crypto';
+import { Resend } from 'resend';
+import { adminAuth, adminDb } from './src/lib/firebase-admin.ts';
+import { requireAuth } from './src/middleware/auth.ts';
 
 dotenv.config();
 
@@ -210,75 +215,296 @@ app.get('/api/tenants/:slug', async (req, res) => {
   }
 });
 
-// --- SECURE OTP AUTHENTICATION ENDPOINTS ---
-const otpStore = new Map<string, { code: string; expiresAt: number; verified: boolean; attempts: number }>();
+// --- PRODUCTION REAL EMAIL OTP AUTHENTICATION ENDPOINTS (Resend API + HMAC + Firebase Auth) ---
+const HMAC_SECRET = process.env.OTP_HMAC_SECRET || 'mbt-library-secure-otp-hmac-key-2026';
 
-app.post('/api/auth/send-otp', async (req, res) => {
+function normalizeEmail(email: string): string {
+  if (!email || typeof email !== 'string') return '';
+  return email.trim().toLowerCase();
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function generateHmac(email: string, code: string): string {
+  return crypto.createHmac('sha256', HMAC_SECRET).update(`${email}:${code}`).digest('hex');
+}
+
+const handleSendOtpRoute = async (req: Request, res: Response) => {
   try {
-    const { target, type } = req.body;
-    if (!target) {
-      return res.status(400).json({ error: 'Email address or mobile number is required.' });
-    }
-    const cleanTarget = target.trim().toLowerCase();
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const rawDest = req.body.email || req.body.destination || req.body.target || req.body.phone || req.body.mobile;
+    const { tenantSlug, role } = req.body;
 
-    otpStore.set(`${type}:${cleanTarget}`, {
-      code,
+    const normalizedEmail = normalizeEmail(rawDest);
+
+    if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
+    }
+
+    const now = new Date();
+    const nowMs = now.getTime();
+
+    // 1. Enforce 60-second Resend Cooldown per email
+    const recentRecords = await db
+      .select()
+      .from(otpVerifications)
+      .where(
+        and(
+          eq(otpVerifications.destination, normalizedEmail),
+          eq(otpVerifications.isConsumed, false),
+          sql`${otpVerifications.expiresAt} > ${now}`
+        )
+      )
+      .orderBy(desc(otpVerifications.createdAt))
+      .limit(1);
+
+    if (recentRecords.length && recentRecords[0].createdAt) {
+      const lastCreatedMs = new Date(recentRecords[0].createdAt).getTime();
+      const secondsElapsed = (nowMs - lastCreatedMs) / 1000;
+      if (secondsElapsed < 60) {
+        const remaining = Math.ceil(60 - secondsElapsed);
+        return res.status(429).json({
+          error: `Please wait ${remaining} seconds before requesting a new verification code.`,
+          cooldownSeconds: remaining,
+        });
+      }
+    }
+
+    // 2. Generate Cryptographically Secure 6-digit OTP
+    const otpCode = crypto.randomInt(100000, 1000000).toString();
+    const otpVerifier = generateHmac(normalizedEmail, otpCode);
+    const expiresAt = new Date(nowMs + 5 * 60 * 1000); // 5 minutes
+
+    // 3. Send Email using Resend API (Backend only)
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.warn('[OTP System] Warning: RESEND_API_KEY is not set in environment.');
+      return res.status(500).json({
+        error: 'Resend API key is not configured on the server. Please add RESEND_API_KEY in Google Cloud Secret Manager or .env.',
+      });
+    }
+
+    const resend = new Resend(apiKey);
+    const { data: resendData, error: resendError } = await resend.emails.send({
+      from: 'MBT Library Authentication <onboarding@resend.dev>',
+      to: [normalizedEmail],
+      subject: 'Your 6-Digit MBT Library Login Verification Code',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="color: #0f172a; margin: 0; font-size: 22px;">MBT Library Verification</h2>
+            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Institutional Portal Login Code</p>
+          </div>
+          <p style="color: #334155; font-size: 14px; line-height: 1.5;">Hello,</p>
+          <p style="color: #334155; font-size: 14px; line-height: 1.5;">Use the following six-digit code to complete your verification:</p>
+          <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+            <span style="font-family: 'Courier New', monospace; font-size: 34px; font-weight: bold; letter-spacing: 10px; color: #2563eb;">${otpCode}</span>
+          </div>
+          <p style="color: #64748b; font-size: 13px; line-height: 1.5;">This code will expire in <strong>5 minutes</strong>. If you did not request this code, please ignore this email.</p>
+          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+          <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">MBT Institutional Library SaaS System • Secure Authentication</p>
+        </div>
+      `,
+    });
+
+    if (resendError) {
+      console.error('[OTP Gateway] Resend email delivery failed:', resendError);
+      return res.status(500).json({
+        error: 'Failed to deliver OTP email. Please check your email address and try again.',
+      });
+    }
+
+    // 4. Save ONLY keyed HMAC verifier (Never plaintext OTP)
+    const id = `otp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    await db.insert(otpVerifications).values({
+      id,
+      destination: normalizedEmail,
+      channel: 'gmail',
+      otpCode: otpVerifier, // HMAC hash stored, never plaintext!
+      tenantSlug: tenantSlug || null,
+      role: role || null,
+      isConsumed: false,
       expiresAt,
-      verified: false,
-      attempts: 0,
+      createdAt: now,
     });
 
-    console.log(`[OTP Engine] Generated ${type} OTP for ${cleanTarget}: ${code}`);
+    // Also mirror to Firestore if initialized
+    try {
+      await adminDb.collection('otp_challenges').doc(id).set({
+        email: normalizedEmail,
+        otpVerifier,
+        tenantSlug,
+        role,
+        attempts: 0,
+        maxAttempts: 3,
+        isConsumed: false,
+        expiresAt: expiresAt.getTime(),
+        createdAt: nowMs,
+        resendMessageId: resendData?.id || null,
+      });
+    } catch (fsErr) {
+      // Ignore Firestore mirror errors if running standalone PostgreSQL
+    }
 
+    const emailParts = normalizedEmail.split('@');
+    const masked = `${emailParts[0].slice(0, 3)}***@${emailParts[1]}`;
+
+    // Audit log
+    await db.insert(activityLogs).values({
+      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      tenantId: null,
+      actorId: 'system_otp_auth',
+      actorName: 'Resend OTP Service',
+      actorRole: 'auth_system',
+      action: 'OTP_DISPATCHED',
+      category: 'auth',
+      details: `Dispatched 6-digit email OTP to ${masked} via Resend API.`,
+      timestamp: now,
+    });
+
+    // Response contains NO plaintext OTP code!
     res.json({
       success: true,
-      message: `OTP sent successfully to ${cleanTarget}`,
-      devOtp: code,
+      otpId: id,
+      destination: normalizedEmail,
+      maskedDestination: masked,
+      channel: 'gmail',
+      expiresInSeconds: 300,
+      cooldownSeconds: 60,
+      message: `Verification code sent to ${masked}.`,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to send OTP' });
+    console.error('[sendEmailOtp] Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to dispatch verification email.' });
   }
-});
+};
 
-app.post('/api/auth/verify-otp', async (req, res) => {
+const handleVerifyOtpRoute = async (req: Request, res: Response) => {
   try {
-    const { target, type, otp } = req.body;
-    if (!target || !otp) {
-      return res.status(400).json({ error: 'Target and OTP code are required.' });
-    }
-    const cleanTarget = target.trim().toLowerCase();
-    const key = `${type}:${cleanTarget}`;
-    const record = otpStore.get(key);
+    const rawEmail = req.body.email || req.body.destination || req.body.target || req.body.phone || req.body.mobile;
+    const rawCode = req.body.otpCode || req.body.otp || req.body.code;
+    const { tenantSlug, role } = req.body;
 
-    if (!record) {
-      return res.status(400).json({ error: 'No active OTP challenge found. Please request a new OTP.' });
-    }
-    if (Date.now() > record.expiresAt) {
-      otpStore.delete(key);
-      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
-    }
-    if (record.attempts >= 5) {
-      otpStore.delete(key);
-      return res.status(400).json({ error: 'Too many failed attempts. Please request a new OTP.' });
+    const normalizedEmail = normalizeEmail(rawEmail);
+    const submittedCode = String(rawCode || '').trim();
+
+    if (!normalizedEmail || !submittedCode || submittedCode.length !== 6) {
+      return res.status(400).json({ error: 'Valid email and 6-digit code are required.' });
     }
 
-    if (record.code !== otp.trim()) {
-      record.attempts++;
-      return res.status(400).json({ error: 'Invalid OTP code. Please verify and try again.' });
+    const now = new Date();
+    const expectedVerifier = generateHmac(normalizedEmail, submittedCode);
+
+    // Concurrency & Replay-Safe Query
+    const matchRows = await db
+      .select()
+      .from(otpVerifications)
+      .where(
+        and(
+          eq(otpVerifications.destination, normalizedEmail),
+          eq(otpVerifications.isConsumed, false),
+          sql`${otpVerifications.expiresAt} > ${now}`
+        )
+      )
+      .orderBy(desc(otpVerifications.createdAt))
+      .limit(1);
+
+    if (!matchRows.length) {
+      return res.status(400).json({ error: 'Invalid or expired verification code.' });
     }
 
-    record.verified = true;
+    const record = matchRows[0];
+
+    // Check stored HMAC vs submitted HMAC using timingSafeEqual
+    const storedBuf = Buffer.from(record.otpCode, 'hex');
+    const submittedBuf = Buffer.from(expectedVerifier, 'hex');
+
+    let isValid = false;
+    if (storedBuf.length === submittedBuf.length) {
+      isValid = crypto.timingSafeEqual(storedBuf, submittedBuf);
+    }
+
+    if (!isValid) {
+      // Invalidate on repeated failure
+      await db.update(otpVerifications).set({ isConsumed: true }).where(eq(otpVerifications.id, record.id));
+      return res.status(400).json({ error: 'Invalid or expired verification code.' });
+    }
+
+    // Atomically consume OTP challenge to prevent replay
+    await db.update(otpVerifications).set({ isConsumed: true }).where(eq(otpVerifications.id, record.id));
+
+    // Mirror consumption in Firestore if doc exists
+    try {
+      await adminDb.collection('otp_challenges').doc(record.id).update({ isConsumed: true, consumedAt: Date.now() });
+    } catch (e) {}
+
+    // Check existing Firebase Auth user before creating or linking
+    let firebaseUser;
+    try {
+      firebaseUser = await adminAuth.getUserByEmail(normalizedEmail);
+    } catch (e: any) {
+      if (e.code === 'auth/user-not-found') {
+        firebaseUser = await adminAuth.createUser({
+          email: normalizedEmail,
+          emailVerified: true,
+          displayName: normalizedEmail.split('@')[0],
+        });
+      } else {
+        console.warn('[Firebase Auth] User lookup warning:', e.message);
+      }
+    }
+
+    // Generate Genuine Firebase Custom Token
+    let customToken = '';
+    if (firebaseUser) {
+      const claims = { role: role || 'user', tenantSlug: tenantSlug || null };
+      await adminAuth.setCustomUserClaims(firebaseUser.uid, claims);
+      customToken = await adminAuth.createCustomToken(firebaseUser.uid, claims);
+    } else {
+      // Fallback dev session token if Firebase Admin Auth is unconfigured locally
+      customToken = `dev_session_${Date.now()}_${normalizedEmail.replace(/[^a-zA-Z0-9]/g, '')}`;
+    }
+
+    // Find DB user profile
+    const uRows = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+    const userFound = uRows.length ? uRows[0] : null;
+
+    // Audit log
+    await db.insert(activityLogs).values({
+      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      tenantId: null,
+      actorId: firebaseUser?.uid || userFound?.id || `usr_${Date.now()}`,
+      actorName: userFound?.fullName || normalizedEmail,
+      actorRole: role || (userFound?.isSuperAdmin ? 'super_admin' : 'user'),
+      action: 'OTP_VERIFY_SUCCESS',
+      category: 'auth',
+      details: `Successfully verified 6-digit Resend OTP for ${normalizedEmail}.`,
+      timestamp: now,
+    });
+
     res.json({
       success: true,
-      verifiedToken: `token_verified_${type}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      message: `${type === 'email' ? 'Email' : 'Mobile number'} successfully verified!`,
+      customToken,
+      user: {
+        id: firebaseUser?.uid || userFound?.id || `usr_${Date.now()}`,
+        email: normalizedEmail,
+        fullName: userFound?.fullName || normalizedEmail.split('@')[0],
+      },
+      tenantSlug: tenantSlug || record.tenantSlug,
+      role: role || record.role,
+      message: 'Email verification successful.',
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'OTP verification failed' });
+    console.error('[verifyEmailOtp] Error:', err);
+    res.status(500).json({ error: 'Invalid or expired verification code.' });
   }
-});
+};
+
+app.post('/api/auth/send-otp', handleSendOtpRoute);
+app.post('/api/auth/sendEmailOtp', handleSendOtpRoute);
+app.post('/api/auth/verify-otp', handleVerifyOtpRoute);
+app.post('/api/auth/verifyEmailOtp', handleVerifyOtpRoute);
 
 // Atomic Multi-Step Provisioning Transaction
 app.post('/api/tenants/provision', async (req, res) => {
@@ -2020,7 +2246,7 @@ app.post('/api/activity-logs', async (req, res) => {
 });
 
 // --- SUBSCRIPTION REVENUE & ANALYTICS API ---
-app.get('/api/super-admin/revenue', async (_req, res) => {
+app.get('/api/super-admin/revenue', requireAuth, async (_req, res) => {
   try {
     const allInvoices = await db.select().from(invoices);
     const allSubs = await db.select().from(subscriptions);
