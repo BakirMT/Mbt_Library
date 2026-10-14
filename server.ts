@@ -1951,12 +1951,22 @@ async function startServer() {
   }
 }
 
-if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
-  app.use(express.static(path.resolve(__dirname, "dist")));
-  app.get("*", (_req, res) => {
-    res.sendFile(path.resolve(__dirname, "dist", "index.html"));
+if (process.env.VERCEL) {
+  // On Vercel, static files and client SPA rewrites are served directly by Vercel CDN.
+  // Express handles /api routes.
+  app.all('/api/*', (_req, res) => {
+    res.status(404).json({ error: 'API endpoint not found' });
   });
   seedDatabaseIfEmpty().catch(console.error);
+} else if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.resolve(__dirname, 'dist')));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+  });
+  seedDatabaseIfEmpty().catch(console.error);
+  app.listen(port, () => {
+    console.log(`[MBT Library Full-Stack] Server running on port ${port}`);
+  });
 } else {
   startServer();
 }

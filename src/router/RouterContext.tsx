@@ -84,8 +84,15 @@ function parsePath(pathname: string, search: string): ParsedRoute {
     return { type: 'checkout', path: cleanPath };
   }
 
-  // 1. Super Admin Portal
-  if (cleanPath === '/super-admin' || cleanPath.startsWith('/super-admin/')) {
+  // 1. Super Admin Portal (/super-admin, /admin, /dashboard)
+  if (
+    cleanPath === '/super-admin' ||
+    cleanPath.startsWith('/super-admin/') ||
+    cleanPath === '/admin' ||
+    cleanPath.startsWith('/admin/') ||
+    cleanPath === '/dashboard' ||
+    cleanPath.startsWith('/dashboard/')
+  ) {
     return {
       type: 'super_admin',
       path: cleanPath,
@@ -94,7 +101,11 @@ function parsePath(pathname: string, search: string): ParsedRoute {
     };
   }
 
-  if (cleanPath === '/super-admin-login') {
+  if (
+    cleanPath === '/super-admin-login' ||
+    cleanPath === '/admin/login' ||
+    cleanPath === '/admin-login'
+  ) {
     return {
       type: 'super_admin_login',
       path: cleanPath,
