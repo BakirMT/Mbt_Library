@@ -101,16 +101,10 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
         <div className="flex items-center space-x-3 text-xs">
           <button
             onClick={() => navigate(`/l/${tenant.slug}`)}
-            className="text-slate-400 hover:text-white flex items-center space-x-1 cursor-pointer"
+            className="text-slate-300 hover:text-white flex items-center space-x-1 cursor-pointer transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Library Public Page</span>
-          </button>
-          <button
-            onClick={() => navigate('/super-admin')}
-            className="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
-          >
-            Super Admin Portal →
+            <span>← Library Public Page</span>
           </button>
         </div>
       </div>
@@ -137,56 +131,56 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
             </div>
           </div>
 
-          <div className="p-6 space-y-4 text-xs">
+          <div className="p-6 sm:p-7 space-y-4">
             {error && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-start space-x-2">
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm flex items-start space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">{error}</span>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-3.5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
+                <label className="block font-semibold text-slate-700 text-xs sm:text-sm mb-1.5">
                   Registered Institutional Email
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="user@institution.edu"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className="w-full pl-10 pr-3 py-2.5 sm:py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700">Account Password</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-semibold text-slate-700 text-xs sm:text-sm">Account Password</label>
                   <button
                     type="button"
                     onClick={() => setShowForgotTip((prev) => !prev)}
-                    className="text-[11px] text-blue-600 hover:text-blue-800 cursor-pointer"
+                    className="text-xs text-blue-600 hover:text-blue-800 cursor-pointer"
                   >
                     Forgot password?
                   </button>
                 </div>
                 {showForgotTip && (
-                  <div className="mb-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-[11px] leading-relaxed">
+                  <div className="mb-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs leading-relaxed">
                     Password reset for this tenant is initiated by the Library Admin or Super Admin via secure invitation tokens. Default test credentials use <strong>Password123!</strong>
                   </div>
                 )}
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className="w-full pl-10 pr-3 py-2.5 sm:py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
                     required
                   />
                 </div>
@@ -195,10 +189,10 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-2.5 text-white font-bold rounded-lg shadow-sm flex items-center justify-center space-x-1.5 transition-opacity cursor-pointer disabled:opacity-50"
+                className="w-full py-3 sm:py-3.5 text-white font-bold text-sm rounded-xl shadow-sm flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                 style={{ backgroundColor: brandColor }}
               >
-                <span>{isSubmitting ? 'Verifying Tenant Access...' : 'Sign In'}</span>
+                <span>{isSubmitting ? 'Authenticating...' : `Sign In as ${role === 'admin' ? 'Library Admin' : role === 'librarian' ? 'Librarian' : 'Student'}`}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>

@@ -35,45 +35,45 @@ export const PublicHomePage: React.FC = () => {
             </div>
 
             <div className="max-w-4xl mx-auto space-y-4">
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.1]">
+              <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.15]">
                 Your Complete Library.{' '}
                 <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-blue-500 bg-clip-text text-transparent">
                   One Smart Platform.
                 </span>
               </h1>
-              <p className="text-base sm:text-xl text-slate-300 font-normal max-w-2xl mx-auto leading-relaxed">
-                Manage books, members, circulation, subscriptions, and library operations with one powerful library management system.
+              <p className="text-sm sm:text-lg md:text-xl text-slate-300 font-normal max-w-2xl mx-auto leading-relaxed">
+                Manage books, members, circulation, subscriptions, and library operations with one powerful multi-tenant library cloud.
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-4 pt-4">
               <button
                 onClick={() => navigate('/plans')}
-                className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-2xl shadow-xl shadow-blue-900/40 flex items-center justify-center space-x-2 cursor-pointer transition-all hover:scale-105"
+                className="w-full sm:w-auto px-7 sm:px-8 py-3.5 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base rounded-xl sm:rounded-2xl shadow-xl shadow-blue-900/40 flex items-center justify-center space-x-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
               >
                 <span>Start Free Trial</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button
                 onClick={() => navigate('/features')}
-                className="w-full sm:w-auto px-8 py-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm rounded-2xl border border-slate-700 flex items-center justify-center space-x-2 cursor-pointer transition-all"
+                className="w-full sm:w-auto px-7 sm:px-8 py-3.5 sm:py-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm sm:text-base rounded-xl sm:rounded-2xl border border-slate-700 flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95"
               >
                 <span>Explore Plans & Features</span>
               </button>
             </div>
 
             {/* Trust Badges */}
-            <div className="pt-8 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-medium">
+            <div className="pt-6 sm:pt-8 flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs sm:text-sm text-slate-300 font-medium">
               <span className="flex items-center space-x-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Instant 3-Day Free Trial</span>
               </span>
               <span className="flex items-center space-x-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Isolated Tenant Portals</span>
               </span>
               <span className="flex items-center space-x-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Cloud SQL PostgreSQL & RLS</span>
               </span>
             </div>
@@ -81,54 +81,54 @@ export const PublicHomePage: React.FC = () => {
         </section>
 
         {/* Dashboard Preview Section */}
-        <section className="py-20 bg-slate-950 border-b border-slate-900">
+        <section className="py-16 sm:py-24 bg-slate-950 border-b border-slate-900">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-3xl mx-auto space-y-3 mb-16">
-              <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Institutional Dashboard</span>
-              <h2 className="text-3xl sm:text-4xl font-black text-white">Built for Librarians and Administrators</h2>
-              <p className="text-sm text-slate-400">
+            <div className="text-center max-w-3xl mx-auto space-y-3 mb-12 sm:mb-16">
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-blue-400">Institutional Dashboard</span>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">Built for Librarians and Administrators</h2>
+              <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
                 Provide your students, faculty, and library staff with blazing-fast role-specific portals tailored to your campus or seminary.
               </p>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
-              <div className="flex flex-col sm:flex-row items-center justify-between border-b border-slate-800 pb-5 gap-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center font-black text-white text-base">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-2xl space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 pb-5 gap-4">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-600 flex items-center justify-center font-black text-white text-base sm:text-lg shrink-0">
                     DI
                   </div>
-                  <div>
-                    <h3 className="font-bold text-white text-base">Darul Irfan Islamic Academy Library</h3>
-                    <p className="text-xs text-slate-400 font-mono">/l/darul-irfan · Standard Institutional Plan</p>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-white text-sm sm:text-base md:text-lg truncate">Darul Irfan Islamic Academy Library</h3>
+                    <p className="text-xs sm:text-sm text-slate-400 font-mono truncate">/l/darul-irfan · Standard Institutional Plan</p>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <div className="flex items-center space-x-2 shrink-0">
+                  <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                     Active Subscription
                   </span>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-1">
-                  <span className="text-slate-400 text-xs font-semibold uppercase">Catalogue Titles</span>
-                  <div className="text-2xl font-black text-white">8,420</div>
-                  <span className="text-[11px] text-emerald-400 font-medium">Fully catalogued volumes</span>
+                <div className="bg-slate-950 p-4 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-800/80 space-y-1.5">
+                  <span className="text-slate-400 text-xs sm:text-sm font-semibold uppercase tracking-wider">Catalogue Titles</span>
+                  <div className="text-2xl sm:text-3xl font-black text-white">8,420</div>
+                  <span className="text-xs text-emerald-400 font-medium">Fully catalogued volumes</span>
                 </div>
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-1">
-                  <span className="text-slate-400 text-xs font-semibold uppercase">Active Circulation</span>
-                  <div className="text-2xl font-black text-white">312</div>
-                  <span className="text-[11px] text-blue-400 font-medium">On loan to students</span>
+                <div className="bg-slate-950 p-4 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-800/80 space-y-1.5">
+                  <span className="text-slate-400 text-xs sm:text-sm font-semibold uppercase tracking-wider">Active Circulation</span>
+                  <div className="text-2xl sm:text-3xl font-black text-white">312</div>
+                  <span className="text-xs text-blue-400 font-medium">On loan to students</span>
                 </div>
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-1">
-                  <span className="text-slate-400 text-xs font-semibold uppercase">Registered Members</span>
-                  <div className="text-2xl font-black text-white">1,420</div>
-                  <span className="text-[11px] text-indigo-400 font-medium">Students & faculty</span>
+                <div className="bg-slate-950 p-4 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-800/80 space-y-1.5">
+                  <span className="text-slate-400 text-xs sm:text-sm font-semibold uppercase tracking-wider">Registered Members</span>
+                  <div className="text-2xl sm:text-3xl font-black text-white">1,420</div>
+                  <span className="text-xs text-indigo-400 font-medium">Students & faculty</span>
                 </div>
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-1">
-                  <span className="text-slate-400 text-xs font-semibold uppercase">Daily Circulation</span>
-                  <div className="text-2xl font-black text-white">48</div>
-                  <span className="text-[11px] text-amber-400 font-medium">Issues & returns today</span>
+                <div className="bg-slate-950 p-4 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-800/80 space-y-1.5">
+                  <span className="text-slate-400 text-xs sm:text-sm font-semibold uppercase tracking-wider">Daily Circulation</span>
+                  <div className="text-2xl sm:text-3xl font-black text-white">48</div>
+                  <span className="text-xs text-amber-400 font-medium">Issues & returns today</span>
                 </div>
               </div>
             </div>
@@ -136,52 +136,52 @@ export const PublicHomePage: React.FC = () => {
         </section>
 
         {/* Three Step Onboarding Section */}
-        <section className="py-24 bg-slate-900 border-b border-slate-800">
+        <section className="py-16 sm:py-24 bg-slate-900 border-b border-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-3xl mx-auto space-y-3 mb-16">
-              <span className="text-xs font-bold uppercase tracking-widest text-blue-400">Simple Onboarding</span>
-              <h2 className="text-3xl sm:text-4xl font-black text-white">Get Your Library Online in 3 Minutes</h2>
-              <p className="text-sm text-slate-400">
+            <div className="text-center max-w-3xl mx-auto space-y-3 mb-12 sm:mb-16">
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-blue-400">Simple Onboarding</span>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">Get Your Library Online in 3 Minutes</h2>
+              <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
                 No complex server setup required. Choose your plan, verify your identity, and launch instantly.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="bg-slate-950 p-8 rounded-3xl border border-slate-800/80 space-y-4 relative">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+              <div className="bg-slate-950 p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-800/80 space-y-4 relative">
                 <div className="w-12 h-12 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-black text-lg">
                   1
                 </div>
-                <h3 className="text-lg font-bold text-white">Choose Plan & Verify</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
+                <h3 className="text-lg sm:text-xl font-bold text-white">Choose Plan & Verify</h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                   Select between Free (3-day trial), Basic, or Standard plans. Securely verify your email and mobile number with OTP.
                 </p>
               </div>
 
-              <div className="bg-slate-950 p-8 rounded-3xl border border-slate-800/80 space-y-4 relative">
+              <div className="bg-slate-950 p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-800/80 space-y-4 relative">
                 <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-black text-lg">
                   2
                 </div>
-                <h3 className="text-lg font-bold text-white">Register Library & Admin</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Provide your institution name, unique library slug (e.g. <code className="text-blue-400">/l/my-library</code>), and initial administrator credentials.
+                <h3 className="text-lg sm:text-xl font-bold text-white">Register Library & Admin</h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Provide your institution name, unique library slug (e.g. <code className="text-blue-400 font-mono">/l/my-library</code>), and initial administrator credentials.
                 </p>
               </div>
 
-              <div className="bg-slate-950 p-8 rounded-3xl border border-slate-800/80 space-y-4 relative">
+              <div className="bg-slate-950 p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-800/80 space-y-4 relative">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-black text-lg">
                   3
                 </div>
-                <h3 className="text-lg font-bold text-white">Launch Portals & Manage</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
+                <h3 className="text-lg sm:text-xl font-bold text-white">Launch Portals & Manage</h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                   Access your dedicated Admin, Librarian, and Student portals instantly. Start cataloguing books and managing circulation.
                 </p>
               </div>
             </div>
 
-            <div className="text-center pt-12">
+            <div className="text-center pt-10 sm:pt-14">
               <button
                 onClick={() => navigate('/auth/register')}
-                className="px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/30 cursor-pointer transition-all"
+                className="w-full sm:w-auto px-8 py-3.5 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-blue-900/30 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
               >
                 Register Your Library Now →
               </button>

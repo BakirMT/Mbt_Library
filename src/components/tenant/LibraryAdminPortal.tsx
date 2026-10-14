@@ -2310,7 +2310,28 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
+                      const enquiryData = {
+                        tenantId: tenant.id,
+                        tenantSlug: tenant.slug,
+                        tenantName: tenant.name,
+                        contactName: session.user.fullName,
+                        contactEmail: session.user.email,
+                        contactPhone: tenant.settings.contactPhone || '',
+                        requestedPlan: 'premium',
+                        message: `Library Admin ${session.user.fullName} requested tier upgrade & custom quota limits for branch "${tenant.name}".`,
+                      };
+
+                      try {
+                        await fetch('/api/enquiries', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(enquiryData),
+                        });
+                      } catch {}
+
+                      saasStorage.createSubscriptionEnquiry(enquiryData);
+
                       saasStorage.logActivity({
                         tenantId: tenant.id,
                         actorId: session.user.id,
@@ -2323,7 +2344,7 @@ const LibraryAdminPortalContent: React.FC<{ tenant: Tenant; session: TenantSessi
                       setUpgradeRequested(true);
                       setNonce((n) => n + 1);
                     }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-sm active:scale-95"
                   >
                     Submit Request
                   </button>

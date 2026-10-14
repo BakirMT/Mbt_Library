@@ -30,9 +30,9 @@ export const ExpiredLibraryPage: React.FC<ExpiredLibraryPageProps> = ({ tenant }
 
   // Contact Authority Modal state
   const [contactModalOpen, setContactModalOpen] = useState(false);
-  const [senderName, setSenderName] = useState('');
-  const [senderEmail, setSenderEmail] = useState('');
-  const [senderPhone, setSenderPhone] = useState('');
+  const [senderName, setSenderName] = useState(tenant.name || '');
+  const [senderEmail, setSenderEmail] = useState(tenant.settings.contactEmail || '');
+  const [senderPhone, setSenderPhone] = useState(tenant.settings.contactPhone || '');
   const [selectedPlan, setSelectedPlan] = useState('standard');
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -68,24 +68,7 @@ export const ExpiredLibraryPage: React.FC<ExpiredLibraryPageProps> = ({ tenant }
 
     setSubmitting(true);
     try {
-      // 1. Post to backend
-      await fetch('/api/enquiries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenantId: tenant.id,
-          tenantSlug: tenant.slug,
-          tenantName: tenant.name,
-          contactName: senderName,
-          contactEmail: senderEmail,
-          contactPhone: senderPhone,
-          requestedPlan: selectedPlan,
-          message: message || 'Free trial expired. Requesting license activation and tier upgrade.',
-        }),
-      }).catch(() => {});
-
-      // 2. Save locally
-      saasStorage.createSubscriptionEnquiry({
+      const payload = {
         tenantId: tenant.id,
         tenantSlug: tenant.slug,
         tenantName: tenant.name,
@@ -93,8 +76,18 @@ export const ExpiredLibraryPage: React.FC<ExpiredLibraryPageProps> = ({ tenant }
         contactEmail: senderEmail,
         contactPhone: senderPhone,
         requestedPlan: selectedPlan,
-        message: message || 'Free trial expired. Requesting license activation and tier upgrade.',
-      });
+        message: message || `Customer submitted upgrade request for "${tenant.name}" (${selectedPlan.toUpperCase()} tier).`,
+      };
+
+      // 1. Post to backend
+      await fetch('/api/enquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+
+      // 2. Save locally
+      saasStorage.createSubscriptionEnquiry(payload);
 
       setSubmitted(true);
     } finally {
@@ -105,7 +98,7 @@ export const ExpiredLibraryPage: React.FC<ExpiredLibraryPageProps> = ({ tenant }
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-slate-100 flex flex-col justify-between">
       {/* Top Banner */}
-      <div className="bg-rose-950/80 border-b border-rose-800/80 px-4 py-2 text-xs text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="bg-rose-950/80 border-b border-rose-800/80 px-4 py-2.5 text-xs text-rose-200 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping shrink-0" />
           <span className="font-bold uppercase tracking-wider text-rose-300">
@@ -115,12 +108,6 @@ export const ExpiredLibraryPage: React.FC<ExpiredLibraryPageProps> = ({ tenant }
             Library access for <strong>{tenant.name}</strong> is currently deactivated.
           </span>
         </div>
-        <button
-          onClick={() => navigate('/super-admin')}
-          className="text-xs text-rose-300 hover:text-white underline font-semibold cursor-pointer shrink-0 self-start sm:self-auto"
-        >
-          Super Admin Console →
-        </button>
       </div>
 
       {/* Main Expired Content */}
@@ -252,13 +239,6 @@ export const ExpiredLibraryPage: React.FC<ExpiredLibraryPageProps> = ({ tenant }
                 <Mail className="w-3 h-3" />
                 <span>support@mbtlibrary.com</span>
               </a>
-              <span>·</span>
-              <button
-                onClick={() => navigate('/super-admin')}
-                className="hover:text-white underline cursor-pointer"
-              >
-                Super Admin Login
-              </button>
             </div>
           </div>
         </div>
@@ -347,19 +327,6 @@ export const ExpiredLibraryPage: React.FC<ExpiredLibraryPageProps> = ({ tenant }
                   Custom Authority Plan
                 </button>
               </div>
-            </div>
-
-            <div className="pt-2 text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setUpgradeModalOpen(false);
-                  navigate('/super-admin?tab=libraries');
-                }}
-                className="text-xs text-blue-400 hover:text-blue-300 underline font-semibold"
-              >
-                Super Admin? Manage & Activate Directly in Super Admin Console →
-              </button>
             </div>
           </div>
         </div>

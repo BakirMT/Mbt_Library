@@ -90,7 +90,7 @@ export const RegisterAuthPage: React.FC = () => {
           </div>
 
           {error && (
-            <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 text-xs font-semibold flex items-center space-x-2">
+            <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 text-xs sm:text-sm font-semibold flex items-center space-x-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -98,8 +98,8 @@ export const RegisterAuthPage: React.FC = () => {
 
           <form onSubmit={handleSendOtps} className="space-y-5">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
-                <Mail className="w-3.5 h-3.5 text-blue-400" />
+              <label className="text-xs sm:text-sm font-semibold text-slate-300 flex items-center space-x-1.5">
+                <Mail className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                 <span>Administrator Email Address *</span>
               </label>
               <input
@@ -108,13 +108,13 @@ export const RegisterAuthPage: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@institution.edu"
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
-                <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              <label className="text-xs sm:text-sm font-semibold text-slate-300 flex items-center space-x-1.5">
+                <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>Mobile Number (with Country Code) *</span>
               </label>
               <input
@@ -122,17 +122,17 @@ export const RegisterAuthPage: React.FC = () => {
                 required
                 value={mobile}
                 onChange={(e) => setMobile(e.target.value)}
-                placeholder="+971 50 123 4567"
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                placeholder="+91 8943182858"
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
               />
             </div>
 
-            <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 text-xs space-y-2 text-slate-400">
+            <div className="bg-slate-900/80 p-4 sm:p-5 rounded-2xl border border-slate-800 text-xs sm:text-sm space-y-2 text-slate-300">
               <div className="font-bold text-slate-200 flex items-center space-x-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Two-Factor Verification Guarantee</span>
               </div>
-              <p>
+              <p className="leading-relaxed">
                 We will send a 6-digit secure OTP code to both your email and mobile number simultaneously.
               </p>
             </div>
@@ -140,14 +140,14 @@ export const RegisterAuthPage: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/30 flex items-center justify-center space-x-2 cursor-pointer transition-colors disabled:opacity-50"
+              className="w-full py-3.5 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-blue-900/30 flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
             >
               <span>{loading ? 'Sending Verification OTPs...' : 'Send OTP to Email & Mobile'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          <div className="text-center pt-2 text-xs text-slate-400">
+          <div className="text-center pt-2 text-xs sm:text-sm text-slate-400">
             Already have a library account?{' '}
             <button onClick={() => navigate('/auth/login')} className="text-blue-400 hover:underline font-semibold cursor-pointer">
               Sign In Here

@@ -107,33 +107,33 @@ export const FeaturesPage: React.FC = () => {
             {facilities.map((fac, idx) => (
               <div 
                 key={idx}
-                className="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800/80 hover:border-blue-500/50 transition-all space-y-4 shadow-xl"
+                className="bg-slate-950 p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-800/80 hover:border-blue-500/50 transition-all space-y-4 shadow-xl"
               >
-                <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
                   {fac.icon}
                 </div>
-                <h3 className="text-lg font-bold text-white">{fac.title}</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">{fac.description}</p>
+                <h3 className="text-lg sm:text-xl font-bold text-white">{fac.title}</h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{fac.description}</p>
               </div>
             ))}
           </div>
 
           {/* Bottom CTA */}
-          <div className="bg-gradient-to-r from-blue-900/30 via-slate-950 to-indigo-900/30 border border-blue-500/30 rounded-3xl p-8 sm:p-12 text-center space-y-6">
-            <h2 className="text-2xl sm:text-3xl font-black text-white">Ready to Modernize Your Library?</h2>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto">
+          <div className="bg-gradient-to-r from-blue-900/30 via-slate-950 to-indigo-900/30 border border-blue-500/30 rounded-2xl sm:rounded-3xl p-6 sm:p-12 text-center space-y-6">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">Ready to Modernize Your Library?</h2>
+            <p className="text-xs sm:text-sm md:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
               Deploy your library in 3 minutes with our strict 3-day Free trial or choose an institutional plan.
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-4">
               <button
                 onClick={() => navigate('/plans')}
-                className="w-full sm:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/30 cursor-pointer transition-all"
+                className="w-full sm:w-auto px-7 sm:px-8 py-3.5 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-blue-900/30 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
               >
                 View Subscription Plans
               </button>
               <button
                 onClick={() => navigate('/auth/register')}
-                className="w-full sm:w-auto px-8 py-3.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 cursor-pointer transition-all"
+                className="w-full sm:w-auto px-7 sm:px-8 py-3.5 sm:py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm sm:text-base rounded-xl border border-slate-700 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
               >
                 Start Free Trial
               </button>

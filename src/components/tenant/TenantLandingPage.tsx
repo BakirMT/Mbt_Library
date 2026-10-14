@@ -35,24 +35,6 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col">
-      {/* Top Multi-Tenant Admin Banner for seamless demo navigation */}
-      <div className="bg-slate-900 text-slate-300 px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-slate-800">
-        <div className="flex items-center space-x-2 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-          <span className="font-semibold text-white truncate">Multi-Tenant Route:</span>
-          <code className="text-blue-400 font-mono text-[11px] truncate">/l/{tenant.slug}</code>
-          <span className="text-slate-400 hidden md:inline truncate">
-            ({tenant.institutionType.replace('_', ' ')})
-          </span>
-        </div>
-        <button
-          onClick={() => navigate('/super-admin?tab=libraries')}
-          className="text-xs text-blue-400 hover:text-white flex items-center space-x-1 font-semibold cursor-pointer shrink-0 self-start sm:self-auto"
-        >
-          <span>← Back to MBT Super Admin</span>
-        </button>
-      </div>
-
       {/* Institution Main Header */}
       <header className="bg-white border-b border-slate-200 shadow-xs sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -79,22 +61,22 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 text-xs overflow-x-auto scrollbar-thin pb-1 sm:pb-0">
+          <div className="flex items-center space-x-2 text-xs sm:text-sm overflow-x-auto scrollbar-thin pb-1 sm:pb-0">
             <button
               onClick={() => navigate(`/l/${tenant.slug}/student/login`)}
-              className="px-3 sm:px-4 py-1.5 sm:py-2 border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
+              className="px-3.5 sm:px-4 py-2 border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-xl transition-colors cursor-pointer shrink-0"
             >
               Student Portal
             </button>
             <button
               onClick={() => navigate(`/l/${tenant.slug}/librarian/login`)}
-              className="px-3 sm:px-4 py-1.5 sm:py-2 border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
+              className="px-3.5 sm:px-4 py-2 border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-xl transition-colors cursor-pointer shrink-0"
             >
               Librarian Desk
             </button>
             <button
               onClick={() => navigate(`/l/${tenant.slug}/admin/login`)}
-              className="px-3 sm:px-4 py-1.5 sm:py-2 text-white font-semibold rounded-lg shadow-xs transition-opacity cursor-pointer shrink-0"
+              className="px-3.5 sm:px-4 py-2 text-white font-semibold rounded-xl shadow-xs transition-opacity cursor-pointer shrink-0"
               style={{ backgroundColor: brandColor }}
             >
               Library Admin
@@ -160,7 +142,7 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Level 2: Library Admin */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="bg-white rounded-2xl p-6 sm:p-7 border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
             <div>
               <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold mb-4">
                 <ShieldCheck className="w-6 h-6" />
@@ -168,12 +150,12 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
               <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
                 Level 2 Access
               </div>
-              <h4 className="text-lg font-bold text-slate-900 mt-1">Library Admin Portal</h4>
-              <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+              <h4 className="text-lg sm:text-xl font-bold text-slate-900 mt-1">Library Admin Portal</h4>
+              <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
                 Configure institution branding, invite librarians, manage student enrolments,
                 and review circulation reports.
               </p>
-              <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
+              <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 space-y-1.5">
                 <div>✓ Staff & librarian accounts</div>
                 <div>✓ Borrowing & overdue policies</div>
                 <div>✓ Subscription usage monitor</div>
@@ -182,7 +164,7 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
 
             <button
               onClick={() => navigate(`/l/${tenant.slug}/admin/login`)}
-              className="mt-6 w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+              className="mt-6 w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95"
             >
               <span>Enter Admin Portal</span>
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
@@ -190,7 +172,7 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
           </div>
 
           {/* Level 3: Librarian Circulation Desk */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="bg-white rounded-2xl p-6 sm:p-7 border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
             <div>
               <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold mb-4">
                 <BookOpen className="w-6 h-6" />
@@ -198,12 +180,12 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
               <div className="text-xs font-bold uppercase tracking-wider text-emerald-600">
                 Level 3 Access
               </div>
-              <h4 className="text-lg font-bold text-slate-900 mt-1">Librarian Circulation Desk</h4>
-              <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+              <h4 className="text-lg sm:text-xl font-bold text-slate-900 mt-1">Librarian Circulation Desk</h4>
+              <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
                 Scan accession barcodes, issue and return books, process hold reservations, and
                 collect overdue fines.
               </p>
-              <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
+              <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 space-y-1.5">
                 <div>✓ Fast barcode check-in / check-out</div>
                 <div>✓ Member search & verification</div>
                 <div>✓ Physical copy condition audits</div>
@@ -212,7 +194,7 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
 
             <button
               onClick={() => navigate(`/l/${tenant.slug}/librarian/login`)}
-              className="mt-6 w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+              className="mt-6 w-full py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold rounded-xl flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95"
             >
               <span>Enter Librarian Desk</span>
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
@@ -220,7 +202,7 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
           </div>
 
           {/* Level 4: Student & Member Portal */}
-          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
+          <div className="bg-white rounded-2xl p-6 sm:p-7 border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
             <div>
               <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold mb-4">
                 <Users className="w-6 h-6" />
@@ -228,12 +210,12 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
               <div className="text-xs font-bold uppercase tracking-wider text-purple-600">
                 Level 4 Access
               </div>
-              <h4 className="text-lg font-bold text-slate-900 mt-1">Student & Member Portal</h4>
-              <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+              <h4 className="text-lg sm:text-xl font-bold text-slate-900 mt-1">Student & Member Portal</h4>
+              <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
                 Search books, view shelf call numbers, reserve high-demand titles, and check your
                 due dates and fine statements.
               </p>
-              <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
+              <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 space-y-1.5">
                 <div>✓ Mobile-responsive self-service</div>
                 <div>✓ Active loans & due date tracker</div>
                 <div>✓ Online hold queue placement</div>
@@ -242,7 +224,7 @@ export const TenantLandingPage: React.FC<TenantLandingPageProps> = ({ tenant }) 
 
             <button
               onClick={() => navigate(`/l/${tenant.slug}/student/login`)}
-              className="mt-6 w-full py-2.5 px-4 bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold rounded-xl flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+              className="mt-6 w-full py-3 px-4 bg-purple-700 hover:bg-purple-800 text-white text-sm font-bold rounded-xl flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95"
             >
               <span>Enter Student Portal</span>
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />

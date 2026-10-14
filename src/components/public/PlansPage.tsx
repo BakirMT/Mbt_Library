@@ -40,14 +40,14 @@ export const PlansPage: React.FC = () => {
               return (
                 <div
                   key={plan.id}
-                  className={`bg-slate-950 rounded-3xl p-6 sm:p-8 border flex flex-col justify-between relative transition-all duration-200 hover:border-blue-500/50 ${
+                  className={`bg-slate-950 rounded-2xl sm:rounded-3xl p-6 sm:p-7 border flex flex-col justify-between relative transition-all duration-200 hover:border-blue-500/50 ${
                     isStandard
                       ? 'border-blue-500 shadow-2xl shadow-blue-950/50 bg-gradient-to-b from-slate-950 via-slate-950 to-blue-950/20'
                       : 'border-slate-800'
                   }`}
                 >
                   {isStandard && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-blue-600 text-white font-black text-[10px] uppercase tracking-wider rounded-full shadow-md">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3.5 py-1 bg-blue-600 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider rounded-full shadow-md whitespace-nowrap">
                       Most Popular Campus Plan
                     </div>
                   )}
@@ -55,32 +55,32 @@ export const PlansPage: React.FC = () => {
                   <div className="space-y-5">
                     <div>
                       <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-black text-white">{plan.name}</h3>
+                        <h3 className="text-lg sm:text-xl font-black text-white">{plan.name}</h3>
                         {isFree && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <span className="px-2 py-0.5 rounded text-[10px] sm:text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                             3-Day Trial
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-400 mt-2 min-h-[36px]">{plan.description}</p>
+                      <p className="text-xs sm:text-sm text-slate-300 mt-2 min-h-[36px] leading-relaxed">{plan.description}</p>
                     </div>
 
                     {/* Pricing */}
                     <div className="py-3 border-y border-slate-800">
                       {isPremium ? (
-                        <div className="text-xl font-black text-white">Contact Authority</div>
+                        <div className="text-xl sm:text-2xl font-black text-white">Contact Authority</div>
                       ) : isFree ? (
-                        <div className="flex items-baseline space-x-1">
-                          <span className="text-3xl font-black text-white">₹0</span>
-                          <span className="text-xs text-slate-400">/ 3 days trial</span>
+                        <div className="flex items-baseline space-x-1.5">
+                          <span className="text-3xl sm:text-4xl font-black text-white">₹0</span>
+                          <span className="text-xs sm:text-sm text-slate-400">/ 3 days trial</span>
                         </div>
                       ) : (
                         <div className="space-y-1">
-                          <div className="flex items-baseline space-x-1">
-                            <span className="text-3xl font-black text-white">₹{plan.priceMonthly.toLocaleString('en-IN')}</span>
-                            <span className="text-xs text-slate-400">/ month</span>
+                          <div className="flex items-baseline space-x-1.5">
+                            <span className="text-3xl sm:text-4xl font-black text-white">₹{plan.priceMonthly.toLocaleString('en-IN')}</span>
+                            <span className="text-xs sm:text-sm text-slate-400">/ month</span>
                           </div>
-                          <div className="text-[11px] text-slate-500 font-medium">
+                          <div className="text-xs text-slate-400 font-medium">
                             or ₹{plan.priceAnnual.toLocaleString('en-IN')} / year (Save 15%)
                           </div>
                         </div>
@@ -88,8 +88,8 @@ export const PlansPage: React.FC = () => {
                     </div>
 
                     {/* Resource Limits List */}
-                    <div className="space-y-2.5 text-xs">
-                      <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Resource Quotas</div>
+                    <div className="space-y-2.5 text-xs sm:text-sm">
+                      <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">Resource Quotas</div>
                       <ul className="space-y-2 text-slate-300">
                         <li className="flex items-center justify-between">
                           <span className="text-slate-400">Catalogue Titles:</span>
@@ -115,13 +115,13 @@ export const PlansPage: React.FC = () => {
                     </div>
 
                     {/* Included Features */}
-                    <div className="space-y-2 text-xs pt-2">
-                      <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Features Included</div>
-                      <ul className="space-y-1.5 text-slate-400">
+                    <div className="space-y-2 text-xs sm:text-sm pt-2">
+                      <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">Features Included</div>
+                      <ul className="space-y-1.5 text-slate-300">
                         {plan.features?.slice(0, 4).map((f, i) => (
                           <li key={i} className="flex items-start space-x-2">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                            <span className="leading-tight">{f}</span>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            <span className="leading-snug">{f}</span>
                           </li>
                         ))}
                       </ul>
@@ -134,7 +134,7 @@ export const PlansPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => navigate('/contact')}
-                        className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center space-x-2 cursor-pointer transition-colors"
+                        className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm rounded-xl border border-slate-700 flex items-center justify-center space-x-2 cursor-pointer transition-colors active:scale-95"
                       >
                         <span>Contact Authority</span>
                       </button>
@@ -142,14 +142,14 @@ export const PlansPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleSelectPlan(plan.id)}
-                        className={`w-full py-3 font-bold text-xs rounded-xl flex items-center justify-center space-x-2 cursor-pointer transition-colors ${
+                        className={`w-full py-3.5 font-bold text-sm rounded-xl flex items-center justify-center space-x-2 cursor-pointer transition-colors active:scale-95 ${
                           isStandard
                             ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/30'
                             : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
                         }`}
                       >
                         <span>{isFree ? 'Start 3-Day Free Trial' : `Select ${plan.name}`}</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
+                        <ArrowRight className="w-4 h-4" />
                       </button>
                     )}
                   </div>
@@ -159,19 +159,19 @@ export const PlansPage: React.FC = () => {
           </div>
 
           {/* FAQ / Info Banner */}
-          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl sm:rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="space-y-2">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <HelpCircle className="w-5 h-5 text-blue-400" />
+              <h3 className="text-base sm:text-lg font-bold text-white flex items-center space-x-2">
+                <HelpCircle className="w-5 h-5 text-blue-400 shrink-0" />
                 <span>Need a Custom Enterprise or National Library Network License?</span>
               </h3>
-              <p className="text-xs text-slate-400 max-w-2xl">
+              <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
                 We support multi-campus federated library synchronization, bespoke cataloguing quotas, and dedicated Cloud SQL database instances for university systems and government ministries.
               </p>
             </div>
             <button
               onClick={() => navigate('/contact')}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shrink-0 cursor-pointer transition-colors"
+              className="w-full sm:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shrink-0 cursor-pointer transition-colors"
             >
               Contact Authority
             </button>

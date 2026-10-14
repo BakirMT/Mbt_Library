@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { saasStorage } from '../../services/storage';
 import { useRouter } from '../../router/RouterContext';
+import { SubscriptionEnquiry } from '../../types/saas';
 
 interface DashboardOverviewProps {
   onOpenProvisionModal: () => void;
@@ -33,6 +34,25 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 }) => {
   const { navigate } = useRouter();
   const [reminderStatus, setReminderStatus] = useState<Record<string, string>>({});
+  const [enquiries, setEnquiries] = useState<SubscriptionEnquiry[]>(() => saasStorage.getSubscriptionEnquiries());
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    saasStorage.syncSubscriptionEnquiriesFromApi().then((list) => {
+      setEnquiries(list);
+    }).catch(() => {});
+  }, []);
+
+  const pendingEnquiries = enquiries.filter((e) => e.status === 'pending');
+
+  const handleQuickApprove = (enquiryId: string) => {
+    const res = saasStorage.approveSubscriptionEnquiry(enquiryId);
+    if (res.success) {
+      setActionFeedback(`Approved upgrade for "${res.tenantName}"! Subscription updated to ${res.planName} & library access reactivated.`);
+      setEnquiries(saasStorage.getSubscriptionEnquiries());
+      setTimeout(() => setActionFeedback(null), 6000);
+    }
+  };
 
   const tenants = saasStorage.getTenants();
   const subscriptions = saasStorage.getSubscriptions();
@@ -324,6 +344,153 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Action Feedback Banner */}
+      {actionFeedback && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-sm animate-in fade-in">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{actionFeedback}</span>
+          </div>
+          <button
+            onClick={() => setActionFeedback(null)}
+            className="text-emerald-700 hover:text-emerald-900 text-xs font-bold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Customer Upgrade Requests & Enquiries Section */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-gradient-to-r from-blue-50/60 to-indigo-50/60">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="font-bold text-slate-900 text-sm">
+                  Customer Upgrade & License Requests
+                </h3>
+                {pendingEnquiries.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white uppercase tracking-wider animate-pulse">
+                    {pendingEnquiries.length} New Action Required
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                Incoming upgrade requests submitted by library administrators and expired institutions
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigateTab('plans')}
+            className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-1 cursor-pointer self-start sm:self-auto"
+          >
+            <span>Configure All Plans</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {enquiries.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
+            <CheckCircle2 className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-sm font-medium text-slate-700">No upgrade requests at this moment.</p>
+            <p className="text-xs text-slate-400">When customers click &quot;Submit Upgrade Request&quot; on expired pages or in their portal, their requests will appear here instantly.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-left text-xs min-w-[700px]">
+              <thead className="bg-slate-50/70 text-slate-500 border-b border-slate-100">
+                <tr>
+                  <th className="px-5 py-3 font-semibold">Library / Institution</th>
+                  <th className="px-5 py-3 font-semibold">Contact Person</th>
+                  <th className="px-5 py-3 font-semibold">Requested Plan</th>
+                  <th className="px-5 py-3 font-semibold">Message / Reason</th>
+                  <th className="px-5 py-3 font-semibold">Request Date</th>
+                  <th className="px-5 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 font-semibold text-right">Admin Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {enquiries.slice(0, 8).map((enq) => {
+                  const isPending = enq.status === 'pending';
+                  const reqPlanUpper = (enq.requestedPlan || 'Standard').toUpperCase();
+
+                  return (
+                    <tr key={enq.id} className={`transition-colors ${isPending ? 'bg-blue-50/20 hover:bg-blue-50/40' : 'hover:bg-slate-50/50'}`}>
+                      <td className="px-5 py-3.5">
+                        <div className="font-bold text-slate-900">{enq.tenantName}</div>
+                        {enq.tenantSlug && (
+                          <div className="text-[11px] text-slate-400 font-mono">/l/{enq.tenantSlug}</div>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="font-semibold text-slate-800">{enq.contactName}</div>
+                        <div className="text-[11px] text-slate-500">{enq.contactEmail}</div>
+                        {enq.contactPhone && (
+                          <div className="text-[11px] text-slate-400">{enq.contactPhone}</div>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                          {reqPlanUpper}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 max-w-xs text-slate-600">
+                        <p className="truncate text-[11px]" title={enq.message || ''}>
+                          {enq.message || 'Trial expired. Requesting license activation.'}
+                        </p>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-500 whitespace-nowrap text-[11px]">
+                        {new Date(enq.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                            isPending
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}
+                        >
+                          {enq.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                        {isPending ? (
+                          <div className="inline-flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleQuickApprove(enq.id)}
+                              className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs transition-all cursor-pointer active:scale-95"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              <span>Approve & Activate</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onNavigateTab('plans')}
+                              className="inline-flex items-center px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors cursor-pointer"
+                            >
+                              Configure
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-emerald-700 font-bold text-xs inline-flex items-center space-x-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Activated</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Subscription Expiry Alerts Section */}

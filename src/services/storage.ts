@@ -2365,6 +2365,134 @@ class SaasStorageService {
 
     return true;
   }
+
+  async syncSubscriptionEnquiriesFromApi(): Promise<SubscriptionEnquiry[]> {
+    try {
+      const res = await fetch('/api/super-admin/enquiries');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const local = this.getSubscriptionEnquiries();
+          const map = new Map<string, SubscriptionEnquiry>();
+          data.forEach((e: any) => map.set(e.id, e));
+          local.forEach((e: any) => {
+            if (!map.has(e.id)) map.set(e.id, e);
+          });
+          const merged = Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          saveToStorage(STORAGE_KEYS.ENQUIRIES, merged);
+          return merged;
+        }
+      }
+    } catch {}
+    return this.getSubscriptionEnquiries();
+  }
+
+  approveSubscriptionEnquiry(
+    enquiryId: string,
+    notes?: string,
+    commercialTerms?: string
+  ): { success: boolean; tenantName?: string; planName?: string } {
+    const list = this.getSubscriptionEnquiries();
+    const idx = list.findIndex((e) => e.id === enquiryId);
+    if (idx === -1) return { success: false };
+
+    const enquiry = list[idx];
+    const plans = this.getPlans();
+
+    // Determine target plan matching customer request
+    let targetPlan = plans.find((p) => p.code.toLowerCase() === (enquiry.requestedPlan || '').toLowerCase());
+    if (!targetPlan) {
+      const code = (enquiry.requestedPlan || '').toLowerCase();
+      if (code.includes('basic')) {
+        targetPlan = plans.find((p) => p.code === 'basic');
+      } else if (code.includes('standard')) {
+        targetPlan = plans.find((p) => p.code === 'standard');
+      } else {
+        targetPlan = plans.find((p) => p.code === 'premium') || plans[plans.length - 1];
+      }
+    }
+    if (!targetPlan) targetPlan = plans[1] || plans[0];
+
+    // If linked to a tenant, activate subscription and restore tenant access
+    if (enquiry.tenantId) {
+      const oneYearExpiry = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString();
+      const customLimits = targetPlan.code === 'premium' ? {
+        maxTitles: enquiry.estimatedTitles || 5000,
+        maxCopies: enquiry.estimatedCopies || 7500,
+        maxLibrarians: enquiry.estimatedLibrarians || 5,
+        maxStudents: enquiry.estimatedStudents || 500,
+        storageMb: enquiry.estimatedStorageMb || 2000,
+      } : undefined;
+
+      this.updateSubscription(enquiry.tenantId, {
+        planId: targetPlan.id,
+        status: 'active',
+        expiryDate: oneYearExpiry,
+        customLimits,
+        customOverrideReason: `Approved upgrade request: ${commercialTerms || notes || 'Super Admin approved'}`
+      });
+
+      // Reactivate tenant
+      this.updateTenantStatus(enquiry.tenantId, 'active', `Reactivated via approved upgrade request to ${targetPlan.name}`);
+
+      // Sync with backend API
+      try {
+        fetch(`/api/super-admin/tenants/${enquiry.tenantId}/subscription`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            planId: targetPlan.id,
+            status: 'active',
+            expiryDate: oneYearExpiry,
+            customMaxTitles: customLimits?.maxTitles,
+            customMaxCopies: customLimits?.maxCopies,
+            customMaxLibrarians: customLimits?.maxLibrarians,
+            customMaxStudents: customLimits?.maxStudents,
+            customMaxStorageMb: customLimits?.storageMb,
+            customOverrideReason: `Approved upgrade request: ${commercialTerms || notes || 'Super Admin approved'}`
+          }),
+        }).catch(() => {});
+      } catch {}
+    }
+
+    // Mark enquiry as approved
+    list[idx] = {
+      ...list[idx],
+      status: 'approved',
+      superAdminNotes: notes || list[idx].superAdminNotes,
+      commercialTerms: commercialTerms || list[idx].commercialTerms,
+      updatedAt: new Date().toISOString(),
+    };
+    saveToStorage(STORAGE_KEYS.ENQUIRIES, list);
+
+    // Sync enquiry status to backend
+    try {
+      fetch(`/api/super-admin/enquiries/${enquiry.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'approved',
+          superAdminNotes: notes || '',
+          commercialTerms: commercialTerms || '',
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    this.logActivity({
+      tenantId: enquiry.tenantId,
+      tenantName: enquiry.tenantName,
+      actorId: 'usr_super_admin_01',
+      actorName: 'Super Administrator',
+      actorRole: 'super_admin',
+      action: 'UPGRADE_REQUEST_APPROVED',
+      category: 'subscription',
+      details: `Approved customer upgrade request for "${enquiry.tenantName}" to plan "${targetPlan.name}". Full library access reactivated.`,
+    });
+
+    return { success: true, tenantName: enquiry.tenantName, planName: targetPlan.name };
+  }
 }
 
 export const saasStorage = new SaasStorageService();

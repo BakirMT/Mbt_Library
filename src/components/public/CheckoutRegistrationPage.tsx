@@ -267,16 +267,16 @@ export const CheckoutRegistrationPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-4 flex items-center justify-between gap-4">
+            <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <button
-                onClick={() => navigate('/super-admin')}
-                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                onClick={() => navigate(`/l/${tenant.slug}`)}
+                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm rounded-xl cursor-pointer transition-colors"
               >
-                Go to Super Admin Console
+                View Library Public Page
               </button>
               <button
                 onClick={() => navigate(`/l/${tenant.slug}/admin/login`)}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg cursor-pointer transition-colors"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-900/30 cursor-pointer transition-colors"
               >
                 Sign In to Library Admin →
               </button>
@@ -323,44 +323,44 @@ export const CheckoutRegistrationPage: React.FC = () => {
                 value={libraryName}
                 onChange={(e) => setLibraryName(e.target.value)}
                 placeholder="e.g. Al-Hikmah Academy Library"
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Unique Library Slug (URL Path) *</label>
-              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl overflow-hidden focus-within:border-blue-500">
-                <span className="px-3 text-xs text-slate-500 font-mono bg-slate-950 py-3 border-r border-slate-800">/l/</span>
+              <label className="text-xs sm:text-sm font-semibold text-slate-300">Unique Library Slug (URL Path) *</label>
+              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
+                <span className="px-3.5 text-xs sm:text-sm text-slate-400 font-mono bg-slate-950 py-2.5 sm:py-3 border-r border-slate-800">/l/</span>
                 <input
                   type="text"
                   required
                   value={slug}
                   onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                   placeholder="al-hikmah"
-                  className="flex-1 px-3 py-3 bg-slate-900 text-xs text-white font-mono outline-none"
+                  className="flex-1 px-3.5 py-2.5 sm:py-3 bg-slate-900 text-sm text-white font-mono outline-none"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Institution Name *</label>
+                <label className="text-xs sm:text-sm font-semibold text-slate-300">Institution Name *</label>
                 <input
                   type="text"
                   required
                   value={institutionName}
                   onChange={(e) => setInstitutionName(e.target.value)}
                   placeholder="e.g. Al-Hikmah Educational Trust"
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Institution Sector *</label>
+                <label className="text-xs sm:text-sm font-semibold text-slate-300">Institution Sector *</label>
                 <select
                   value={institutionType}
                   onChange={(e) => setInstitutionType(e.target.value as InstitutionType)}
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none cursor-pointer"
+                  className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none cursor-pointer transition-colors"
                 >
                   <option value="islamic_institution">Islamic Seminary / Madrasa</option>
                   <option value="college">College / Higher Secondary</option>
@@ -373,25 +373,25 @@ export const CheckoutRegistrationPage: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Administrator Full Name *</label>
+              <label className="text-xs sm:text-sm font-semibold text-slate-300">Administrator Full Name *</label>
               <input
                 type="text"
                 required
                 value={adminFullName}
                 onChange={(e) => setAdminFullName(e.target.value)}
-                placeholder="e.g. Sheikh Ahmed Al-Mansoor"
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                placeholder="e.g. Dr. Ibrahim Al-Mansoor"
+                className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Campus Address</label>
+              <label className="text-xs sm:text-sm font-semibold text-slate-300">Campus Address</label>
               <input
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="Building, Street, City, Country"
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
               />
             </div>
 
@@ -402,18 +402,18 @@ export const CheckoutRegistrationPage: React.FC = () => {
                 required
                 checked={acceptedTerms}
                 onChange={(e) => setAcceptedTerms(e.target.checked)}
-                className="mt-0.5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0 cursor-pointer"
+                className="mt-1 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0 cursor-pointer"
               />
-              <label htmlFor="terms" className="text-xs text-slate-400 cursor-pointer leading-tight">
+              <label htmlFor="terms" className="text-xs sm:text-sm text-slate-300 cursor-pointer leading-relaxed">
                 I accept the MBT Library <span className="text-blue-400 underline">Terms of Service</span> and <span className="text-blue-400 underline">Privacy Policy</span>. I confirm that the provided contact mobile and email are verified.
               </label>
             </div>
 
-            <div className="pt-2 flex items-center justify-between">
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
               <button
                 type="button"
                 onClick={() => navigate('/auth/verify')}
-                className="text-xs text-slate-400 hover:text-white cursor-pointer underline"
+                className="text-xs sm:text-sm text-slate-400 hover:text-white cursor-pointer underline order-2 sm:order-1"
               >
                 ← Back to OTP Verification
               </button>
@@ -421,7 +421,7 @@ export const CheckoutRegistrationPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/30 flex items-center space-x-2 cursor-pointer transition-colors disabled:opacity-50"
+                className="w-full sm:w-auto px-8 py-3.5 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-blue-900/30 flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50 order-1 sm:order-2"
               >
                 <span>{submitting ? 'Provisioning Library...' : 'Provision Library & Launch'}</span>
                 <ArrowRight className="w-4 h-4" />

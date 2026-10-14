@@ -79,10 +79,10 @@ const AppContent: React.FC = () => {
             </p>
             <div className="pt-2 space-y-2">
               <button
-                onClick={() => navigate('/super-admin')}
+                onClick={() => navigate('/')}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
               >
-                Go to MBT Super Admin Portal
+                Return to Homepage
               </button>
             </div>
           </div>
@@ -118,15 +118,15 @@ const AppContent: React.FC = () => {
               </span>
               <h2 className="text-xl font-black text-white">{targetTenant.name}</h2>
               <p className="text-xs text-slate-300 leading-relaxed">
-                Access to this library has been suspended by the MBT Library authority. All portal activities and catalogue queries are disabled until reactivated by the Super Admin.
+                Access to this library has been suspended by the MBT Library authority. All portal activities and catalogue queries are disabled until reactivated.
               </p>
             </div>
             <div className="pt-2">
               <button
-                onClick={() => navigate('/super-admin')}
+                onClick={() => navigate('/')}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
-                Go to MBT Super Admin Portal
+                Return to Homepage
               </button>
             </div>
           </div>
@@ -182,18 +182,12 @@ const AppContent: React.FC = () => {
               The page <code className="px-2 py-0.5 rounded bg-slate-100 text-rose-600 font-mono text-xs">{route.path}</code> does not exist or may have been moved.
             </p>
           </div>
-          <div className="pt-2 flex flex-col gap-2.5 sm:flex-row">
+          <div className="pt-2 flex justify-center">
             <button
               onClick={() => navigate('/')}
-              className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors cursor-pointer"
+              className="w-full sm:w-auto py-2.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors cursor-pointer"
             >
               Go to Homepage
-            </button>
-            <button
-              onClick={() => navigate('/super-admin')}
-              className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-            >
-              Super Admin Portal
             </button>
           </div>
         </div>

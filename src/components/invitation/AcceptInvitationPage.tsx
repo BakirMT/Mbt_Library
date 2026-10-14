@@ -40,10 +40,10 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ toke
             your MBT Library administrator to request a fresh invitation link.
           </p>
           <button
-            onClick={() => navigate('/super-admin')}
-            className="w-full py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold"
+            onClick={() => navigate('/')}
+            className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
           >
-            Go to Platform Portal
+            Go to Platform Homepage
           </button>
         </div>
       </div>
@@ -89,10 +89,10 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ toke
               Go to {invitation.tenantName}
             </button>
             <button
-              onClick={() => navigate('/super-admin')}
-              className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+              onClick={() => navigate('/')}
+              className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
             >
-              Super Admin Portal
+              Return to Homepage
             </button>
           </div>
         </div>

@@ -8,15 +8,15 @@ interface LogoProps {
 }
 
 export const Logo: React.FC<LogoProps> = ({ 
-  className = "w-10 h-10", 
+  className = "", 
   size = 40,
   showText = false,
   subtext = "Multi-Tenant Library System"
 }) => {
   return (
-    <div className={`flex items-center space-x-3 ${className}`}>
+    <div className={`flex items-center space-x-2.5 sm:space-x-3 min-w-0 ${className}`}>
       <div className="flex-shrink-0" style={{ width: size, height: size }}>
-        <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md select-none" fill="none" xmlns="http://www.w3.org/2000/svg">
           {/* Laptop Base Outline */}
           <path d="M15 82H85C88.3 82 91 79.3 91 76V74C91 71.8 89.2 70 87 70H13C10.8 70 9 71.8 9 74V76C9 79.3 11.7 82 15 82Z" fill="#1e3a8a" />
           <path d="M42 82H58V84C58 85.1 57.1 86 56 86H44C42.9 86 42 85.1 42 82Z" fill="#0f172a" />
@@ -54,12 +54,14 @@ export const Logo: React.FC<LogoProps> = ({
       </div>
 
       {showText && (
-        <div>
-          <div className="font-black text-lg tracking-tight flex items-center space-x-1.5 text-white">
-            <span>MBT Library</span>
-            <span className="text-[10px] uppercase font-bold bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/30">SaaS</span>
+        <div className="min-w-0 text-left">
+          <div className="font-black text-base sm:text-lg tracking-tight flex items-center space-x-1.5 text-white leading-tight">
+            <span className="truncate">MBT Library</span>
+            <span className="text-[10px] uppercase font-bold bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/30 shrink-0">SaaS</span>
           </div>
-          <p className="text-[11px] text-slate-400 font-medium">{subtext}</p>
+          <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[160px] sm:max-w-[220px] md:max-w-none leading-normal">
+            {subtext}
+          </p>
         </div>
       )}
     </div>

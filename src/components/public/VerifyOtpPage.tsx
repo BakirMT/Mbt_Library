@@ -120,98 +120,98 @@ export const VerifyOtpPage: React.FC = () => {
 
           <div className="space-y-6">
             {/* Email Verification Box */}
-            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-3">
+            <div className="bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-800 space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <Mail className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs font-bold text-white">Email Verification ({email})</span>
+                  <Mail className="w-4 h-4 text-blue-400 shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold text-white">Email Verification ({email})</span>
                 </div>
                 {emailVerified ? (
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                     Verified ✓
                   </span>
                 ) : (
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                     Unverified
                   </span>
                 )}
               </div>
 
               {!emailVerified ? (
-                <form onSubmit={handleVerifyEmail} className="flex gap-2">
+                <form onSubmit={handleVerifyEmail} className="flex flex-col sm:flex-row gap-2.5">
                   <input
                     type="text"
                     maxLength={6}
                     value={emailOtp}
                     onChange={(e) => setEmailOtp(e.target.value)}
                     placeholder="6-digit Email OTP"
-                    className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white font-mono tracking-widest outline-none"
+                    className="flex-1 px-4 py-2.5 sm:py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white font-mono tracking-widest outline-none focus:border-blue-500 transition-colors"
                   />
                   <button
                     type="submit"
                     disabled={loadingEmail || emailOtp.length < 6}
-                    className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-colors disabled:opacity-50 shrink-0"
+                    className="px-5 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50 shrink-0"
                   >
                     {loadingEmail ? 'Verifying...' : 'Verify Email'}
                   </button>
                 </form>
               ) : (
-                <div className="text-xs text-emerald-300 font-semibold flex items-center space-x-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <div className="text-xs sm:text-sm text-emerald-300 font-semibold flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>Email successfully verified and cryptographically bound.</span>
                 </div>
               )}
             </div>
 
             {/* Mobile Verification Box */}
-            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-3">
+            <div className="bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-800 space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <Phone className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-white">Mobile Verification ({mobile})</span>
+                  <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold text-white">Mobile Verification ({mobile})</span>
                 </div>
                 {mobileVerified ? (
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                     Verified ✓
                   </span>
                 ) : (
-                  <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <span className="px-2.5 py-0.5 rounded text-[10px] sm:text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                     Unverified
                   </span>
                 )}
               </div>
 
               {!mobileVerified ? (
-                <form onSubmit={handleVerifyMobile} className="flex gap-2">
+                <form onSubmit={handleVerifyMobile} className="flex flex-col sm:flex-row gap-2.5">
                   <input
                     type="text"
                     maxLength={6}
                     value={mobileOtp}
                     onChange={(e) => setMobileOtp(e.target.value)}
                     placeholder="6-digit Mobile OTP"
-                    className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white font-mono tracking-widest outline-none"
+                    className="flex-1 px-4 py-2.5 sm:py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white font-mono tracking-widest outline-none focus:border-emerald-500 transition-colors"
                   />
                   <button
                     type="submit"
                     disabled={loadingMobile || mobileOtp.length < 6}
-                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-colors disabled:opacity-50 shrink-0"
+                    className="px-5 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50 shrink-0"
                   >
                     {loadingMobile ? 'Verifying...' : 'Verify Mobile'}
                   </button>
                 </form>
               ) : (
-                <div className="text-xs text-emerald-300 font-semibold flex items-center space-x-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <div className="text-xs sm:text-sm text-emerald-300 font-semibold flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>Mobile number successfully verified and bound.</span>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+          <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <button
               onClick={() => navigate('/auth/register')}
-              className="text-xs text-slate-400 hover:text-white cursor-pointer underline"
+              className="text-xs sm:text-sm text-slate-400 hover:text-white cursor-pointer underline order-2 sm:order-1"
             >
               ← Change Email or Mobile
             </button>
@@ -219,7 +219,7 @@ export const VerifyOtpPage: React.FC = () => {
             <button
               onClick={handleProceed}
               disabled={!emailVerified || !mobileVerified}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/30 flex items-center space-x-2 cursor-pointer transition-colors disabled:opacity-40"
+              className="w-full sm:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-blue-900/30 flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95 disabled:opacity-40 order-1 sm:order-2"
             >
               <span>Proceed to Library Details</span>
               <ArrowRight className="w-4 h-4" />

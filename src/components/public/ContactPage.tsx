@@ -79,112 +79,112 @@ export const ContactPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Contact Info Cards */}
             <div className="space-y-6">
-              <div className="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
-                <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
+              <div className="bg-slate-950 p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+                <div className="w-11 h-11 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
                   <Mail className="w-5 h-5" />
                 </div>
-                <h3 className="font-bold text-white text-base">Email Authority</h3>
-                <p className="text-xs text-slate-400">For licensing, billing, custom limits, and technical support inquiries.</p>
-                <a href="mailto:mbtofficial26@gmail.com" className="text-xs font-semibold text-blue-400 hover:text-blue-300 block">
+                <h3 className="font-bold text-white text-base sm:text-lg">Email Authority</h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">For licensing, billing, custom limits, and technical support inquiries.</p>
+                <a href="mailto:mbtofficial26@gmail.com" className="text-xs sm:text-sm font-semibold text-blue-400 hover:text-blue-300 block">
                   mbtofficial26@gmail.com
                 </a>
               </div>
 
-              <div className="bg-slate-950 p-6 sm:p-8 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+              <div className="bg-slate-950 p-6 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+                <div className="w-11 h-11 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
                   <Phone className="w-5 h-5" />
                 </div>
-                <h3 className="font-bold text-white text-base">Direct Helpline</h3>
-                <p className="text-xs text-slate-400">MBT Super Admin Authority contact hotline.</p>
-                <span className="text-xs font-semibold text-emerald-400 block">
+                <h3 className="font-bold text-white text-base sm:text-lg">Direct Helpline</h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">MBT Super Admin Authority contact hotline.</p>
+                <span className="text-xs sm:text-sm font-semibold text-emerald-400 block font-mono">
                   +91 8943182858
                 </span>
               </div>
             </div>
 
             {/* Contact / Enquiry Form */}
-            <div className="lg:col-span-2 bg-slate-950 p-8 sm:p-10 rounded-3xl border border-slate-800 shadow-2xl">
+            <div className="lg:col-span-2 bg-slate-950 p-6 sm:p-10 rounded-2xl sm:rounded-3xl border border-slate-800 shadow-2xl">
               {submitted ? (
                 <div className="text-center py-12 space-y-4">
                   <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
                     <CheckCircle2 className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-bold text-white">Enquiry Successfully Submitted!</h3>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                  <h3 className="text-xl sm:text-2xl font-bold text-white">Enquiry Successfully Submitted!</h3>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
                     Thank you, <strong>{contactName}</strong>. Our MBT Library licensing authority has received your request for <strong>{tenantName}</strong> and will contact you shortly.
                   </p>
                   <button
                     onClick={() => { setSubmitted(false); setTenantName(''); setContactName(''); setContactEmail(''); setContactPhone(''); setMessage(''); }}
-                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                    className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl cursor-pointer transition-colors active:scale-95"
                   >
                     Submit Another Enquiry
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-5">
                   {error && (
-                    <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 text-xs font-semibold">
+                    <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 text-xs sm:text-sm font-semibold">
                       {error}
                     </div>
                   )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Library / Institution Name *</label>
+                      <label className="text-xs sm:text-sm font-semibold text-slate-300">Library / Institution Name *</label>
                       <input
                         type="text"
                         required
                         value={tenantName}
                         onChange={(e) => setTenantName(e.target.value)}
                         placeholder="e.g. Al-Noor Academy Library"
-                        className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                        className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Your Full Name *</label>
+                      <label className="text-xs sm:text-sm font-semibold text-slate-300">Your Full Name *</label>
                       <input
                         type="text"
                         required
                         value={contactName}
                         onChange={(e) => setContactName(e.target.value)}
                         placeholder="e.g. Dr. Ibrahim Al-Hassan"
-                        className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                        className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Email Address *</label>
+                      <label className="text-xs sm:text-sm font-semibold text-slate-300">Email Address *</label>
                       <input
                         type="email"
                         required
                         value={contactEmail}
                         onChange={(e) => setContactEmail(e.target.value)}
                         placeholder="director@institution.edu"
-                        className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                        className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Mobile Number / Phone</label>
+                      <label className="text-xs sm:text-sm font-semibold text-slate-300">Mobile Number / Phone</label>
                       <input
                         type="tel"
                         value={contactPhone}
                         onChange={(e) => setContactPhone(e.target.value)}
-                        placeholder="+971 50 123 4567"
-                        className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none"
+                        placeholder="+91 8943182858"
+                        className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none transition-colors"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Interested Plan / Tier</label>
+                    <label className="text-xs sm:text-sm font-semibold text-slate-300">Interested Plan / Tier</label>
                     <select
                       value={requestedPlan}
                       onChange={(e) => setRequestedPlan(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none cursor-pointer"
+                      className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none cursor-pointer"
                     >
                       <option value="premium">Premium Plan (Custom Institutional Requirements)</option>
                       <option value="standard">Standard Plan (Campus & College)</option>
@@ -194,20 +194,20 @@ export const ContactPage: React.FC = () => {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Message & Custom Requirements</label>
+                    <label className="text-xs sm:text-sm font-semibold text-slate-300">Message & Custom Requirements</label>
                     <textarea
                       rows={4}
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       placeholder="Please specify estimated student count, number of titles, or special integration needs..."
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-blue-500 outline-none resize-none"
+                      className="w-full px-4 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:border-blue-500 outline-none resize-none"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-900/30 flex items-center justify-center space-x-2 cursor-pointer transition-colors disabled:opacity-50"
+                    className="w-full py-3.5 sm:py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-blue-900/30 flex items-center justify-center space-x-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
                   >
                     <Send className="w-4 h-4" />
                     <span>{submitting ? 'Submitting Enquiry...' : 'Send Enquiry to Authority'}</span>

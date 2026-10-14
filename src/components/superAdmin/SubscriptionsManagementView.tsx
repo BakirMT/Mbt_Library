@@ -216,62 +216,11 @@ export const SubscriptionsManagementView: React.FC = () => {
   };
 
   const handleApproveEnquiryAsPremium = async (enquiry: SubscriptionEnquiry) => {
-    // If tenant exists, update subscription to Premium with requested limits
-    if (enquiry.tenantId) {
-      const premPlan = plans.find((p) => p.code === 'premium') || plans[3];
-      const customLimits = {
-        maxTitles: enquiry.estimatedTitles || 5000,
-        maxCopies: enquiry.estimatedCopies || 7500,
-        maxLibrarians: enquiry.estimatedLibrarians || 5,
-        maxStudents: enquiry.estimatedStudents || 500,
-        storageMb: enquiry.estimatedStorageMb || 2000,
-      };
-
-      saasStorage.updateSubscription(enquiry.tenantId, {
-        planId: premPlan.id,
-        customLimits,
-        customOverrideReason: `Approved Premium Enquiry: ${enquiryCommercialTerms || 'Commercial authority agreement'}`,
-      });
-
-      try {
-        await fetch(`/api/super-admin/tenants/${enquiry.tenantId}/subscription`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            planId: premPlan.id,
-            customMaxTitles: customLimits.maxTitles,
-            customMaxCopies: customLimits.maxCopies,
-            customMaxLibrarians: customLimits.maxLibrarians,
-            customMaxStudents: customLimits.maxStudents,
-            customMaxStorageMb: customLimits.storageMb,
-            customOverrideReason: `Approved Premium Enquiry: ${enquiryCommercialTerms || 'Commercial agreement'}`,
-          }),
-        });
-      } catch (err) {
-        console.warn(err);
-      }
-    }
-
-    saasStorage.updateSubscriptionEnquiryStatus(
+    saasStorage.approveSubscriptionEnquiry(
       enquiry.id,
-      'approved',
       enquiryNotes,
       enquiryCommercialTerms
     );
-
-    try {
-      await fetch(`/api/super-admin/enquiries/${enquiry.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'approved',
-          superAdminNotes: enquiryNotes,
-          commercialTerms: enquiryCommercialTerms,
-        }),
-      });
-    } catch (err) {
-      console.warn(err);
-    }
 
     setReviewEnquiry(null);
     setRefreshNonce((n) => n + 1);
@@ -617,42 +566,55 @@ export const SubscriptionsManagementView: React.FC = () => {
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                             enq.status === 'pending'
-                              ? 'bg-amber-100 text-amber-800'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
                               : enq.status === 'approved'
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                               : 'bg-slate-100 text-slate-600'
                           }`}
                         >
                           {enq.status}
                         </span>
+                        {enq.requestedPlan && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 uppercase">
+                            Requested: {enq.requestedPlan}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-600">
                         Contact: <strong>{enq.contactName}</strong> ({enq.contactEmail}) · {enq.contactPhone || 'No phone'}
                       </div>
                       {enq.message && <p className="text-xs text-slate-500 italic mt-1">&quot;{enq.message}&quot;</p>}
                       <div className="flex items-center space-x-3 text-[11px] text-slate-500 mt-2">
-                        <span>Requested: {enq.estimatedTitles || 'Custom'} Titles</span>
-                        <span>·</span>
-                        <span>{enq.estimatedCopies || 'Custom'} Copies</span>
-                        <span>·</span>
-                        <span>{enq.estimatedStudents || 'Custom'} Students</span>
-                        <span>·</span>
-                        <span>{enq.estimatedStorageMb || 'Custom'} MB Storage</span>
+                        <span>Submitted: {new Date(enq.createdAt).toLocaleDateString()}</span>
+                        {enq.estimatedTitles && <span>· {enq.estimatedTitles} Titles</span>}
+                        {enq.estimatedStudents && <span>· {enq.estimatedStudents} Students</span>}
                       </div>
                     </div>
 
                     <div className="flex items-center space-x-2 self-start md:self-auto shrink-0">
                       {enq.status === 'pending' && (
-                        <button
-                          onClick={() => {
-                            setReviewEnquiry(enq);
-                            setEnquiryNotes(enq.superAdminNotes || '');
-                            setEnquiryCommercialTerms(enq.commercialTerms || '');
-                          }}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer"
-                        >
-                          Review & Configure Limits
-                        </button>
+                        <>
+                          <button
+                            onClick={() => {
+                              saasStorage.approveSubscriptionEnquiry(enq.id);
+                              setRefreshNonce((n) => n + 1);
+                            }}
+                            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg cursor-pointer flex items-center space-x-1 shadow-xs transition-all active:scale-95"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Quick Approve</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setReviewEnquiry(enq);
+                              setEnquiryNotes(enq.superAdminNotes || '');
+                              setEnquiryCommercialTerms(enq.commercialTerms || '');
+                            }}
+                            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer"
+                          >
+                            Configure Limits
+                          </button>
+                        </>
                       )}
                       {enq.status === 'approved' && (
                         <span className="text-xs text-emerald-700 font-bold flex items-center space-x-1">
