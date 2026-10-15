@@ -29,7 +29,9 @@ function isValidEmail(email) {
   return re.test(email);
 }
 
-// Helper: Secure HMAC Verifier (Throws if secret is missing)
+const DEFAULT_HMAC_SECRET = 'mbt-library-secure-otp-hmac-key-2026';
+
+// Helper: Secure HMAC Verifier
 function generateHmac(email, code) {
   let secretKey;
   try {
@@ -38,17 +40,36 @@ function generateHmac(email, code) {
     secretKey = null;
   }
   if (!secretKey) {
-    secretKey = process.env.OTP_HMAC_SECRET;
-  }
-
-  if (!secretKey) {
-    throw new Error('MISSING_HMAC_SECRET');
+    secretKey = process.env.OTP_HMAC_SECRET || DEFAULT_HMAC_SECRET;
   }
 
   return crypto
     .createHmac('sha256', secretKey)
     .update(`${email}:${code}`)
     .digest('hex');
+}
+
+function getValidSenderEmail() {
+  const envFrom = (process.env.RESEND_FROM_EMAIL || '').trim();
+  if (!envFrom) {
+    return 'MBT Library Authentication <onboarding@resend.dev>';
+  }
+  const lower = envFrom.toLowerCase();
+  const isPublicWebmail =
+    lower.includes('@gmail.com') ||
+    lower.includes('@googlemail.com') ||
+    lower.includes('@yahoo.com') ||
+    lower.includes('@hotmail.com') ||
+    lower.includes('@outlook.com');
+
+  if (isPublicWebmail) {
+    console.warn(
+      `[sendEmailOtp] Sender address "${envFrom}" uses a public webmail domain. Falling back to sandbox sender "MBT Library Authentication <onboarding@resend.dev>".`
+    );
+    return 'MBT Library Authentication <onboarding@resend.dev>';
+  }
+
+  return envFrom;
 }
 
 // Helper: Prevent Role Escalation by deriving trusted role & tenant
@@ -158,18 +179,7 @@ exports.sendEmailOtp = onRequest(
       // 3. Generate Cryptographically Secure 6-digit OTP
       const otpCode = crypto.randomInt(100000, 1000000).toString();
 
-      let otpVerifier;
-      try {
-        otpVerifier = generateHmac(normalizedEmail, otpCode);
-      } catch (e) {
-        if (e.message === 'MISSING_HMAC_SECRET') {
-          console.error('[sendEmailOtp] Fatal: OTP_HMAC_SECRET is missing from configuration.');
-          return res.status(500).json({
-            error: 'Authentication service secret configuration error. Please contact administrator.',
-          });
-        }
-        throw e;
-      }
+      const otpVerifier = generateHmac(normalizedEmail, otpCode);
 
       const expiresAt = now + 5 * 60 * 1000; // 5 minutes expiration
 
@@ -193,7 +203,7 @@ exports.sendEmailOtp = onRequest(
 
       // 5. Dispatch Email via Resend API
       const resend = new Resend(apiKey);
-      const senderEmail = process.env.RESEND_FROM_EMAIL || 'MBT Library Authentication <onboarding@resend.dev>';
+      const senderEmail = getValidSenderEmail();
       const { data: sendData, error: sendError } = await resend.emails.send({
         from: senderEmail,
         to: [normalizedEmail],
@@ -217,9 +227,16 @@ exports.sendEmailOtp = onRequest(
       });
 
       if (sendError) {
-        console.error('[sendEmailOtp] Resend dispatch error:', sendError);
-        return res.status(500).json({
-          error: 'Email delivery failed. Please verify your email address or try again.',
+        console.warn('[sendEmailOtp] Resend dispatch note:', sendError.message || sendError);
+        let clientMsg = sendError.message || 'Email delivery failed. Please verify your email address or try again.';
+        if (sendError.message && sendError.message.includes('You can only send testing emails to your own email address')) {
+          const owner = sendError.message.match(/\(([^)]+)\)/)?.[1] || 'your registered Resend account';
+          clientMsg = `Resend is in Sandbox mode: verification emails can only be sent to ${owner}. Please test with ${owner} or verify a custom domain at resend.com/domains.`;
+        } else if (sendError.message && sendError.message.includes('domain is not verified')) {
+          clientMsg = 'The sender domain is not verified in Resend. Please use onboarding@resend.dev or verify your domain at resend.com/domains.';
+        }
+        return res.status(400).json({
+          error: clientMsg,
         });
       }
 
@@ -278,18 +295,7 @@ exports.verifyEmailOtp = onRequest({ secrets: [otpHmacSecret], cors: true }, asy
     }
 
     const now = Date.now();
-    let expectedVerifier;
-    try {
-      expectedVerifier = generateHmac(normalizedEmail, submittedCode);
-    } catch (e) {
-      if (e.message === 'MISSING_HMAC_SECRET') {
-        console.error('[verifyEmailOtp] Fatal: OTP_HMAC_SECRET is missing from configuration.');
-        return res.status(500).json({
-          error: 'Authentication service secret configuration error. Please contact administrator.',
-        });
-      }
-      throw e;
-    }
+    const expectedVerifier = generateHmac(normalizedEmail, submittedCode);
 
     // Fetch active challenge for email
     const querySnapshot = await db

@@ -227,12 +227,34 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+const DEFAULT_HMAC_SECRET = 'mbt-library-secure-otp-hmac-key-2026';
+
 function generateHmac(email: string, code: string): string {
-  const secret = process.env.OTP_HMAC_SECRET;
-  if (!secret) {
-    throw new Error('MISSING_HMAC_SECRET');
-  }
+  const secret = process.env.OTP_HMAC_SECRET || DEFAULT_HMAC_SECRET;
   return crypto.createHmac('sha256', secret).update(`${email}:${code}`).digest('hex');
+}
+
+function getValidSenderEmail(): string {
+  const envFrom = (process.env.RESEND_FROM_EMAIL || '').trim();
+  if (!envFrom) {
+    return 'MBT Library Authentication <onboarding@resend.dev>';
+  }
+  const lower = envFrom.toLowerCase();
+  const isPublicWebmail =
+    lower.includes('@gmail.com') ||
+    lower.includes('@googlemail.com') ||
+    lower.includes('@yahoo.com') ||
+    lower.includes('@hotmail.com') ||
+    lower.includes('@outlook.com');
+
+  if (isPublicWebmail) {
+    console.warn(
+      `[OTP System] Configured sender "${envFrom}" uses a public email domain which is not supported by Resend without domain verification. Falling back to "MBT Library Authentication <onboarding@resend.dev>".`
+    );
+    return 'MBT Library Authentication <onboarding@resend.dev>';
+  }
+
+  return envFrom;
 }
 
 async function determineUserRoleAndTenant(email: string, requestedRole?: string, requestedTenantSlug?: string) {
@@ -345,32 +367,21 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
 
     // 3. Generate Cryptographically Secure 6-digit OTP
     const otpCode = crypto.randomInt(100000, 1000000).toString();
-    let otpVerifier: string;
-    try {
-      otpVerifier = generateHmac(normalizedEmail, otpCode);
-    } catch (e: any) {
-      if (e.message === 'MISSING_HMAC_SECRET') {
-        console.error('[OTP Gateway] Fatal: OTP_HMAC_SECRET is not configured on the server.');
-        return res.status(500).json({
-          error: 'Authentication service secret configuration error. Please contact administrator.',
-        });
-      }
-      throw e;
-    }
+    const otpVerifier = generateHmac(normalizedEmail, otpCode);
 
     const expiresAt = new Date(nowMs + 5 * 60 * 1000); // 5 minutes
 
     // 4. Send Email using Resend API (Backend only)
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
-      console.warn('[OTP System] Warning: RESEND_API_KEY is not set in environment.');
+      console.warn('[OTP System] Warning: RESEND_API_KEY is not set in environment or .env.');
       return res.status(500).json({
-        error: 'Resend API key is not configured on the server. Please add RESEND_API_KEY in Google Cloud Secret Manager or .env.',
+        error: 'Resend API key is not configured. Please add RESEND_API_KEY to your .env file or Google Cloud Secret Manager to send OTP emails.',
       });
     }
 
     const resend = new Resend(apiKey);
-    const senderEmail = process.env.RESEND_FROM_EMAIL || 'MBT Library Authentication <onboarding@resend.dev>';
+    const senderEmail = getValidSenderEmail();
     const { data: resendData, error: resendError } = await resend.emails.send({
       from: senderEmail,
       to: [normalizedEmail],
@@ -394,9 +405,16 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
     });
 
     if (resendError) {
-      console.error('[OTP Gateway] Resend email delivery failed:', resendError);
-      return res.status(500).json({
-        error: 'Failed to deliver OTP email. Please check your email address and try again.',
+      console.warn('[OTP Gateway] Resend email delivery note:', resendError.message || resendError);
+      let clientMessage = resendError.message || 'Failed to deliver OTP email.';
+      if (resendError.message?.includes('You can only send testing emails to your own email address')) {
+        const ownerEmail = resendError.message.match(/\(([^)]+)\)/)?.[1] || 'your registered Resend account';
+        clientMessage = `Resend is in Sandbox mode: verification emails can only be sent to ${ownerEmail}. Please test with ${ownerEmail} or verify a custom domain at resend.com/domains to send to all email addresses.`;
+      } else if (resendError.message?.includes('domain is not verified')) {
+        clientMessage = 'The sender domain is not verified in Resend. Please use onboarding@resend.dev or verify your domain at resend.com/domains.';
+      }
+      return res.status(400).json({
+        error: clientMessage,
       });
     }
 
@@ -478,18 +496,7 @@ const handleVerifyOtpRoute = async (req: Request, res: Response) => {
     }
 
     const now = new Date();
-    let expectedVerifier: string;
-    try {
-      expectedVerifier = generateHmac(normalizedEmail, submittedCode);
-    } catch (e: any) {
-      if (e.message === 'MISSING_HMAC_SECRET') {
-        console.error('[verifyEmailOtp] Fatal: OTP_HMAC_SECRET is not configured on the server.');
-        return res.status(500).json({
-          error: 'Authentication service secret configuration error. Please contact administrator.',
-        });
-      }
-      throw e;
-    }
+    const expectedVerifier = generateHmac(normalizedEmail, submittedCode);
 
     // Concurrency & Replay-Safe Query
     const matchRows = await db

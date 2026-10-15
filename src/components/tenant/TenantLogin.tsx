@@ -368,7 +368,7 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
                         onClick={() => setOtpSent(false)}
                         className="text-slate-500 hover:text-slate-800 underline cursor-pointer"
                       >
-                        ← Change Number / Email
+                        ← Change Email
                       </button>
                       <button
                         type="button"
