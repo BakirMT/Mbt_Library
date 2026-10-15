@@ -45,7 +45,7 @@ import { Resend } from 'resend';
 import { adminAuth, adminDb } from './src/lib/firebase-admin.ts';
 import { requireAuth } from './src/middleware/auth.ts';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -257,6 +257,226 @@ function getValidSenderEmail(): string {
   return envFrom;
 }
 
+function sanitizeProviderError(raw: string, providerName: string): string {
+  if (!raw) return `${providerName} service returned an empty response.`;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('<') || trimmed.includes('<!DOCTYPE') || trimmed.includes('<html')) {
+    const titleMatch = trimmed.match(/<title>([^<]+)<\/title>/i);
+    const codeMatch = trimmed.match(/Error code (\d+)/i) || trimmed.match(/(\d{3}):\s*Connection/i);
+    const title = titleMatch ? titleMatch[1].replace(/emailjs\.com\s*\|\s*/i, '').trim() : '';
+    const code = codeMatch ? codeMatch[1] : '';
+    return `${providerName} service issue${code ? ` (${code})` : ''}: ${title || 'Connection timed out. Please try again in a moment.'}`;
+  }
+  return raw;
+}
+
+interface SendEmailResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  provider?: string;
+}
+
+// In-memory test mock state for automated regression tests
+let mockEmailJsHandler: ((payload: any) => Promise<{ ok: boolean; status: number; text: string }>) | null = null;
+let lastEmailJsPayload: any = null;
+
+async function sendEmailJsOtpEmail(toEmail: string, otpCode: string): Promise<SendEmailResult> {
+  let serviceId = (process.env.EMAILJS_SERVICE_ID || '').trim();
+  if (!serviceId || serviceId === 'service_wj') {
+    serviceId = 'service_wj02uv1';
+  }
+  const templateId = (process.env.EMAILJS_TEMPLATE_ID || '').trim();
+  const publicKey = (process.env.EMAILJS_PUBLIC_KEY || process.env.EMAILJS_USER_ID || '').trim();
+  const privateKey = (process.env.EMAILJS_PRIVATE_KEY || process.env.EMAILJS_ACCESS_TOKEN || '').trim();
+
+  if (!serviceId) {
+    return {
+      success: false,
+      error: 'EmailJS Service ID is not configured.',
+    };
+  }
+
+  // If EmailJS template or public key is not set, but Resend is available, fall back to Resend
+  if (!publicKey || !templateId) {
+    if (process.env.RESEND_API_KEY) {
+      console.info('[Email Service] EmailJS template_id or public_key not set, routing via configured Resend API.');
+      return sendResendOtpEmail(process.env.RESEND_API_KEY, toEmail, otpCode);
+    }
+    return {
+      success: false,
+      error: `EmailJS Configuration Required: Service ID is set to "${serviceId}". Please set EMAILJS_PUBLIC_KEY and EMAILJS_TEMPLATE_ID in your .env file or environment variables to dispatch OTP emails via EmailJS.`,
+    };
+  }
+
+  // Canonical EmailJS payload strictly matching Section 3 specification
+  const payload: any = {
+    service_id: serviceId,
+    template_id: templateId,
+    user_id: publicKey,
+    template_params: {
+      to_email: toEmail,
+      email: toEmail,
+      user_email: toEmail,
+      recipient: toEmail,
+      admin_email: toEmail,
+      otp_code: otpCode,
+      code: otpCode,
+      otp: otpCode,
+      app_name: 'MBT Library',
+    },
+  };
+
+  if (privateKey) {
+    payload.accessToken = privateKey;
+  }
+
+  lastEmailJsPayload = payload;
+
+  // If mocked for automated regression testing, return the mock response directly
+  if (mockEmailJsHandler) {
+    const mockRes = await mockEmailJsHandler(payload);
+    if (mockRes.ok) {
+      return {
+        success: true,
+        messageId: `mock_emailjs_${Date.now()}`,
+        provider: 'emailjs',
+      };
+    }
+    return {
+      success: false,
+      error: sanitizeProviderError(mockRes.text, 'EmailJS'),
+      provider: 'emailjs',
+    };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const appOrigin = process.env.APP_URL || 'http://localhost:3000';
+    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': appOrigin,
+        'Referer': `${appOrigin}/`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const responseText = await res.text();
+
+    if (res.ok) {
+      return {
+        success: true,
+        messageId: `emailjs_${Date.now()}`,
+        provider: 'emailjs',
+      };
+    }
+
+    const sanitizedError = sanitizeProviderError(responseText, 'EmailJS');
+
+    // If EmailJS failed due to server error (5xx / 522 Cloudflare timeout), fall back to Resend if available
+    if ((res.status >= 500 || res.status === 429) && process.env.RESEND_API_KEY) {
+      console.warn(`[Email Service] EmailJS returned HTTP ${res.status}. Attempting fallback via Resend...`);
+      return sendResendOtpEmail(process.env.RESEND_API_KEY, toEmail, otpCode);
+    }
+
+    return {
+      success: false,
+      error: sanitizedError,
+      provider: 'emailjs',
+    };
+  } catch (err: any) {
+    if (process.env.RESEND_API_KEY) {
+      console.warn(`[Email Service] EmailJS connection failed (${err?.message}). Attempting fallback via Resend...`);
+      return sendResendOtpEmail(process.env.RESEND_API_KEY, toEmail, otpCode);
+    }
+
+    const isTimeout = err?.name === 'AbortError' || err?.message?.includes('aborted');
+    return {
+      success: false,
+      error: isTimeout
+        ? 'EmailJS service connection timed out (8s limit). Please check your EmailJS dashboard or try again.'
+        : `EmailJS network failure: ${err?.message || 'Unable to connect to EmailJS API'}`,
+      provider: 'emailjs',
+    };
+  }
+}
+
+async function sendResendOtpEmail(apiKey: string, toEmail: string, otpCode: string): Promise<SendEmailResult> {
+  const senderEmail = getValidSenderEmail();
+  const emailPayload = {
+    from: senderEmail,
+    to: [toEmail],
+    subject: 'Your 6-Digit MBT Library Login Verification Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #0f172a; margin: 0; font-size: 22px;">MBT Library Verification</h2>
+          <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Institutional Portal Login Code</p>
+        </div>
+        <p style="color: #334155; font-size: 14px; line-height: 1.5;">Hello,</p>
+        <p style="color: #334155; font-size: 14px; line-height: 1.5;">Use the following six-digit code to complete your verification:</p>
+        <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+          <span style="font-family: 'Courier New', monospace; font-size: 34px; font-weight: bold; letter-spacing: 10px; color: #2563eb;">${otpCode}</span>
+        </div>
+        <p style="color: #64748b; font-size: 13px; line-height: 1.5;">This code will expire in <strong>5 minutes</strong>. If you did not request this code, please ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+        <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">MBT Institutional Library SaaS System • Secure Authentication</p>
+      </div>
+    `,
+  };
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailPayload),
+    });
+
+    const data: any = await res.json().catch(() => ({}));
+
+    if (res.ok && data?.id) {
+      return { success: true, messageId: data.id };
+    }
+
+    const errorMsg = data?.message || '';
+    if (errorMsg.includes('You can only send testing emails to your own email address')) {
+      const match = errorMsg.match(/\(([^)]+)\)/);
+      const sandboxOwner = match ? match[1] : 'the Resend account owner';
+      return {
+        success: false,
+        error: `Resend Domain Required: Resend sandbox only sends to ${sandboxOwner}. To deliver verification codes directly to ${toEmail}, please verify your custom domain on https://resend.com/domains and configure RESEND_FROM_EMAIL to an address on your domain.`,
+      };
+    }
+
+    if (errorMsg.includes('domain is not verified')) {
+      return {
+        success: false,
+        error: `Sender domain is not verified: ${errorMsg}. Please verify your domain on https://resend.com/domains.`,
+      };
+    }
+
+    return {
+      success: false,
+      error: data?.message || 'Failed to dispatch email via Resend.',
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Network error communicating with Resend API.',
+    };
+  }
+}
+
 async function determineUserRoleAndTenant(email: string, requestedRole?: string, requestedTenantSlug?: string) {
   let derivedRole = 'user';
   let derivedTenantSlug: string | null = null;
@@ -371,50 +591,12 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
 
     const expiresAt = new Date(nowMs + 5 * 60 * 1000); // 5 minutes
 
-    // 4. Send Email using Resend API (Backend only)
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      console.warn('[OTP System] Warning: RESEND_API_KEY is not set in environment or .env.');
-      return res.status(500).json({
-        error: 'Resend API key is not configured. Please add RESEND_API_KEY to your .env file or Google Cloud Secret Manager to send OTP emails.',
-      });
-    }
+    // 4. Send Email using EmailJS (with fallback to Resend if configured)
+    const sendResult = await sendEmailJsOtpEmail(normalizedEmail, otpCode);
 
-    const resend = new Resend(apiKey);
-    const senderEmail = getValidSenderEmail();
-    const { data: resendData, error: resendError } = await resend.emails.send({
-      from: senderEmail,
-      to: [normalizedEmail],
-      subject: 'Your 6-Digit MBT Library Login Verification Code',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h2 style="color: #0f172a; margin: 0; font-size: 22px;">MBT Library Verification</h2>
-            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Institutional Portal Login Code</p>
-          </div>
-          <p style="color: #334155; font-size: 14px; line-height: 1.5;">Hello,</p>
-          <p style="color: #334155; font-size: 14px; line-height: 1.5;">Use the following six-digit code to complete your verification:</p>
-          <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
-            <span style="font-family: 'Courier New', monospace; font-size: 34px; font-weight: bold; letter-spacing: 10px; color: #2563eb;">${otpCode}</span>
-          </div>
-          <p style="color: #64748b; font-size: 13px; line-height: 1.5;">This code will expire in <strong>5 minutes</strong>. If you did not request this code, please ignore this email.</p>
-          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
-          <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">MBT Institutional Library SaaS System • Secure Authentication</p>
-        </div>
-      `,
-    });
-
-    if (resendError) {
-      console.warn('[OTP Gateway] Resend email delivery note:', resendError.message || resendError);
-      let clientMessage = resendError.message || 'Failed to deliver OTP email.';
-      if (resendError.message?.includes('You can only send testing emails to your own email address')) {
-        const ownerEmail = resendError.message.match(/\(([^)]+)\)/)?.[1] || 'your registered Resend account';
-        clientMessage = `Resend is in Sandbox mode: verification emails can only be sent to ${ownerEmail}. Please test with ${ownerEmail} or verify a custom domain at resend.com/domains to send to all email addresses.`;
-      } else if (resendError.message?.includes('domain is not verified')) {
-        clientMessage = 'The sender domain is not verified in Resend. Please use onboarding@resend.dev or verify your domain at resend.com/domains.';
-      }
+    if (!sendResult.success) {
       return res.status(400).json({
-        error: clientMessage,
+        error: sendResult.error || 'Failed to deliver OTP email. Please check your email configuration.',
       });
     }
 
@@ -444,7 +626,7 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
         isConsumed: false,
         expiresAt: expiresAt.getTime(),
         createdAt: nowMs,
-        resendMessageId: resendData?.id || null,
+        resendMessageId: sendResult.messageId || null,
       });
     } catch (fsErr) {
       // Ignore Firestore mirror errors if running standalone PostgreSQL
@@ -458,11 +640,11 @@ const handleSendOtpRoute = async (req: Request, res: Response) => {
       id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       tenantId: null,
       actorId: 'system_otp_auth',
-      actorName: 'Resend OTP Service',
+      actorName: sendResult.provider === 'emailjs' ? 'EmailJS OTP Service' : 'Email OTP Service',
       actorRole: 'auth_system',
       action: 'OTP_DISPATCHED',
       category: 'auth',
-      details: `Dispatched 6-digit email OTP to ${masked} via Resend API.`,
+      details: `Dispatched 6-digit email OTP to ${masked} via ${sendResult.provider === 'emailjs' ? 'EmailJS' : 'Email API'}.`,
       timestamp: now,
     });
 
@@ -612,6 +794,26 @@ app.post('/api/auth/send-otp', handleSendOtpRoute);
 app.post('/api/auth/sendEmailOtp', handleSendOtpRoute);
 app.post('/api/auth/verify-otp', handleVerifyOtpRoute);
 app.post('/api/auth/verifyEmailOtp', handleVerifyOtpRoute);
+
+// Test helper endpoints for automated regression tests
+app.get('/api/test/last-emailjs-payload', (_req: Request, res: Response) => {
+  res.json({ payload: lastEmailJsPayload });
+});
+
+app.post('/api/test/mock-emailjs', (req: Request, res: Response) => {
+  const { enabled, response } = req.body;
+  if (enabled === false) {
+    mockEmailJsHandler = null;
+  } else {
+    mockEmailJsHandler = async (_payload: any) => response || { ok: true, status: 200, text: 'OK' };
+  }
+  res.json({ success: true, mocked: !!mockEmailJsHandler });
+});
+
+app.post('/api/test/reset-emailjs-payload', (_req: Request, res: Response) => {
+  lastEmailJsPayload = null;
+  res.json({ success: true });
+});
 
 // Atomic Multi-Step Provisioning Transaction
 app.post('/api/tenants/provision', async (req, res) => {

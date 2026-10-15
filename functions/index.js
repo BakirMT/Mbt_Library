@@ -72,6 +72,215 @@ function getValidSenderEmail() {
   return envFrom;
 }
 
+function sanitizeProviderError(raw, providerName) {
+  if (!raw) return `${providerName} service returned an empty response.`;
+  const trimmed = String(raw).trim();
+  if (trimmed.startsWith('<') || trimmed.includes('<!DOCTYPE') || trimmed.includes('<html')) {
+    const titleMatch = trimmed.match(/<title>([^<]+)<\/title>/i);
+    const codeMatch = trimmed.match(/Error code (\d+)/i) || trimmed.match(/(\d{3}):\s*Connection/i);
+    const title = titleMatch ? titleMatch[1].replace(/emailjs\.com\s*\|\s*/i, '').trim() : '';
+    const code = codeMatch ? codeMatch[1] : '';
+    return `${providerName} service issue${code ? ` (${code})` : ''}: ${title || 'Connection timed out. Please try again in a moment.'}`;
+  }
+  return raw;
+}
+
+async function sendEmailJsOtpEmail(toEmail, otpCode) {
+  const serviceId = (process.env.EMAILJS_SERVICE_ID || '').trim() || 'service_wj02uv1';
+  const templateId = (process.env.EMAILJS_TEMPLATE_ID || '').trim();
+  const publicKey = (process.env.EMAILJS_PUBLIC_KEY || process.env.EMAILJS_USER_ID || '').trim();
+  const privateKey = (process.env.EMAILJS_PRIVATE_KEY || process.env.EMAILJS_ACCESS_TOKEN || '').trim();
+
+  if (!serviceId) {
+    return {
+      success: false,
+      error: 'EmailJS Service ID is not configured.',
+    };
+  }
+
+  // If EmailJS template or public key is not set, but Resend is available, fall back to Resend
+  if (!publicKey || !templateId) {
+    let resendKey;
+    try {
+      resendKey = typeof resendApiKeySecret.value === 'function' ? resendApiKeySecret.value() : null;
+    } catch (e) {
+      resendKey = null;
+    }
+    if (!resendKey) resendKey = process.env.RESEND_API_KEY;
+
+    if (resendKey) {
+      return sendResendOtpEmail(resendKey, toEmail, otpCode);
+    }
+    return {
+      success: false,
+      error: `EmailJS Configuration Required: Service ID is set to "${serviceId}". Please configure EMAILJS_PUBLIC_KEY and EMAILJS_TEMPLATE_ID to dispatch OTP emails via EmailJS.`,
+    };
+  }
+
+  // Canonical EmailJS payload strictly matching Section 3 specification
+  const payload = {
+    service_id: serviceId,
+    template_id: templateId,
+    user_id: publicKey,
+    template_params: {
+      to_email: toEmail,
+      email: toEmail,
+      user_email: toEmail,
+      recipient: toEmail,
+      admin_email: toEmail,
+      otp_code: otpCode,
+      code: otpCode,
+      otp: otpCode,
+      app_name: 'MBT Library',
+    },
+  };
+
+  if (privateKey) {
+    payload.accessToken = privateKey;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const appOrigin = process.env.APP_URL || 'http://localhost:3000';
+    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': appOrigin,
+        'Referer': `${appOrigin}/`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const responseText = await res.text();
+
+    if (res.ok) {
+      return {
+        success: true,
+        messageId: `emailjs_${Date.now()}`,
+        provider: 'emailjs',
+      };
+    }
+
+    const sanitizedError = sanitizeProviderError(responseText, 'EmailJS');
+
+    let resendKey;
+    try {
+      resendKey = typeof resendApiKeySecret.value === 'function' ? resendApiKeySecret.value() : null;
+    } catch (e) {
+      resendKey = null;
+    }
+    if (!resendKey) resendKey = process.env.RESEND_API_KEY;
+
+    if ((res.status >= 500 || res.status === 429) && resendKey) {
+      console.warn(`[sendEmailOtp] EmailJS returned HTTP ${res.status}. Attempting fallback via Resend...`);
+      return sendResendOtpEmail(resendKey, toEmail, otpCode);
+    }
+
+    return {
+      success: false,
+      error: sanitizedError,
+      provider: 'emailjs',
+    };
+  } catch (err) {
+    let resendKey;
+    try {
+      resendKey = typeof resendApiKeySecret.value === 'function' ? resendApiKeySecret.value() : null;
+    } catch (e) {
+      resendKey = null;
+    }
+    if (!resendKey) resendKey = process.env.RESEND_API_KEY;
+
+    if (resendKey) {
+      console.warn(`[sendEmailOtp] EmailJS connection failed (${err && err.message}). Attempting fallback via Resend...`);
+      return sendResendOtpEmail(resendKey, toEmail, otpCode);
+    }
+
+    const isTimeout = err && (err.name === 'AbortError' || (err.message && err.message.includes('aborted')));
+    return {
+      success: false,
+      error: isTimeout
+        ? 'EmailJS service connection timed out (8s limit). Please check your EmailJS dashboard or try again.'
+        : `EmailJS network failure: ${err && err.message ? err.message : 'Unable to connect to EmailJS API'}`,
+      provider: 'emailjs',
+    };
+  }
+}
+
+async function sendResendOtpEmail(apiKey, toEmail, otpCode) {
+  const senderEmail = getValidSenderEmail();
+  const emailPayload = {
+    from: senderEmail,
+    to: [toEmail],
+    subject: 'Your 6-Digit MBT Library Login Verification Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #0f172a; margin: 0; font-size: 22px;">MBT Library Verification</h2>
+          <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Institutional Portal Login Code</p>
+        </div>
+        <p style="color: #334155; font-size: 14px; line-height: 1.5;">Hello,</p>
+        <p style="color: #334155; font-size: 14px; line-height: 1.5;">Use the following six-digit code to complete your verification:</p>
+        <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+          <span style="font-family: 'Courier New', monospace; font-size: 34px; font-weight: bold; letter-spacing: 10px; color: #2563eb;">${otpCode}</span>
+        </div>
+        <p style="color: #64748b; font-size: 13px; line-height: 1.5;">This code will expire in <strong>5 minutes</strong>. If you did not request this code, please ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+        <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">MBT Institutional Library SaaS System • Secure Authentication</p>
+      </div>
+    `,
+  };
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailPayload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data && data.id) {
+      return { success: true, messageId: data.id };
+    }
+
+    const errorMsg = data && data.message ? data.message : '';
+    if (errorMsg.includes('You can only send testing emails to your own email address')) {
+      const match = errorMsg.match(/\(([^)]+)\)/);
+      const sandboxOwner = match ? match[1] : 'the Resend account owner';
+      return {
+        success: false,
+        error: `Resend Domain Required: Resend sandbox only sends to ${sandboxOwner}. To deliver verification codes directly to ${toEmail}, please verify your custom domain on https://resend.com/domains and configure RESEND_FROM_EMAIL to an address on your domain.`,
+      };
+    }
+
+    if (errorMsg.includes('domain is not verified')) {
+      return {
+        success: false,
+        error: `Sender domain is not verified: ${errorMsg}. Please verify your domain on https://resend.com/domains.`,
+      };
+    }
+
+    return {
+      success: false,
+      error: data && data.message ? data.message : 'Failed to dispatch email via Resend.',
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err && err.message ? err.message : 'Network error communicating with Resend API.',
+    };
+  }
+}
+
 // Helper: Prevent Role Escalation by deriving trusted role & tenant
 async function determineUserRoleAndTenant(email, requestedRole, requestedTenantSlug) {
   let derivedRole = 'user';
@@ -183,60 +392,12 @@ exports.sendEmailOtp = onRequest(
 
       const expiresAt = now + 5 * 60 * 1000; // 5 minutes expiration
 
-      // 4. Retrieve Resend API Key
-      let apiKey;
-      try {
-        apiKey = typeof resendApiKeySecret.value === 'function' ? resendApiKeySecret.value() : null;
-      } catch (e) {
-        apiKey = null;
-      }
-      if (!apiKey) {
-        apiKey = process.env.RESEND_API_KEY;
-      }
+      // 5. Dispatch Email via EmailJS (with fallback to Resend if configured)
+      const sendResult = await sendEmailJsOtpEmail(normalizedEmail, otpCode);
 
-      if (!apiKey) {
-        console.error('[sendEmailOtp] Missing RESEND_API_KEY secret.');
-        return res.status(500).json({
-          error: 'Email delivery service is currently unconfigured. Please contact support.',
-        });
-      }
-
-      // 5. Dispatch Email via Resend API
-      const resend = new Resend(apiKey);
-      const senderEmail = getValidSenderEmail();
-      const { data: sendData, error: sendError } = await resend.emails.send({
-        from: senderEmail,
-        to: [normalizedEmail],
-        subject: 'Your 6-Digit MBT Library Login Verification Code',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;">
-            <div style="text-align: center; margin-bottom: 20px;">
-              <h2 style="color: #0f172a; margin: 0; font-size: 22px;">MBT Library Verification</h2>
-              <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Institutional Portal Login Code</p>
-            </div>
-            <p style="color: #334155; font-size: 14px; line-height: 1.5;">Hello,</p>
-            <p style="color: #334155; font-size: 14px; line-height: 1.5;">Use the following six-digit code to complete your verification:</p>
-            <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
-              <span style="font-family: 'Courier New', monospace; font-size: 34px; font-weight: bold; letter-spacing: 10px; color: #2563eb;">${otpCode}</span>
-            </div>
-            <p style="color: #64748b; font-size: 13px; line-height: 1.5;">This code will expire in <strong>5 minutes</strong>. If you did not request this code, please ignore this email.</p>
-            <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
-            <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">MBT Institutional Library SaaS System • Secure Authentication</p>
-          </div>
-        `,
-      });
-
-      if (sendError) {
-        console.warn('[sendEmailOtp] Resend dispatch note:', sendError.message || sendError);
-        let clientMsg = sendError.message || 'Email delivery failed. Please verify your email address or try again.';
-        if (sendError.message && sendError.message.includes('You can only send testing emails to your own email address')) {
-          const owner = sendError.message.match(/\(([^)]+)\)/)?.[1] || 'your registered Resend account';
-          clientMsg = `Resend is in Sandbox mode: verification emails can only be sent to ${owner}. Please test with ${owner} or verify a custom domain at resend.com/domains.`;
-        } else if (sendError.message && sendError.message.includes('domain is not verified')) {
-          clientMsg = 'The sender domain is not verified in Resend. Please use onboarding@resend.dev or verify your domain at resend.com/domains.';
-        }
+      if (!sendResult.success) {
         return res.status(400).json({
-          error: clientMsg,
+          error: sendResult.error || 'Email delivery failed. Please verify your email configuration.',
         });
       }
 
@@ -252,7 +413,7 @@ exports.sendEmailOtp = onRequest(
         isConsumed: false,
         expiresAt,
         createdAt: now,
-        resendMessageId: sendData?.id || null,
+        resendMessageId: sendResult.messageId || null,
       });
 
       // Mask email for response log

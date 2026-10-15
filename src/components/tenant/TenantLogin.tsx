@@ -107,7 +107,7 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: otpDestination.trim(),
+          email: otpDestination.trim().toLowerCase(),
           tenantSlug: tenant.slug,
           role,
         }),

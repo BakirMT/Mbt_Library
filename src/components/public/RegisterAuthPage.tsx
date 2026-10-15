@@ -31,17 +31,17 @@ export const RegisterAuthPage: React.FC = () => {
     setLoading(true);
 
     try {
-      // Send Real Email OTP via Resend API
+      const cleanEmail = email.trim().toLowerCase();
       const emailRes = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: cleanEmail }),
       });
       const emailData = await emailRes.json();
       if (!emailRes.ok) throw new Error(emailData.error || 'Failed to send verification email');
 
       // Store temporary registration state in sessionStorage
-      sessionStorage.setItem('mbt_reg_email', email);
+      sessionStorage.setItem('mbt_reg_email', cleanEmail);
       sessionStorage.setItem('mbt_reg_mobile', mobile || '+91 0000000000');
       sessionStorage.setItem('mbt_reg_plan', plan.id);
 
