@@ -3054,13 +3054,18 @@ async function startServer() {
   }
 }
 
-if (process.env.VERCEL) {
-  // On Vercel, static files and client SPA rewrites are served directly by Vercel CDN.
-  // Express handles /api routes.
-  app.all('/api/*', (_req, res) => {
-    res.status(404).json({ error: 'API endpoint not found' });
+// Global Express Error Middleware ensuring JSON response format
+app.use((err: any, _req: Request, res: Response, _next: any) => {
+  console.error('[Server Error Handler]:', err);
+  if (res.headersSent) return;
+  res.setHeader('Content-Type', 'application/json');
+  res.status(err?.status || 500).json({
+    error: err?.message || 'An unexpected server error occurred. Please try again in a moment.',
   });
-  seedDatabaseIfEmpty().catch(console.error);
+});
+
+if (process.env.VERCEL) {
+  seedDatabaseIfEmpty().catch(() => {});
 } else if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.resolve(__dirname, 'dist')));
   app.get('*', (_req, res) => {

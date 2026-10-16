@@ -113,7 +113,17 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
         }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        const resText = await res.text();
+        try {
+          data = JSON.parse(resText);
+        } catch {
+          data = { error: resText || 'Server error. Please try again in a moment.' };
+        }
+      } catch {
+        data = { error: 'Unable to read server response.' };
+      }
       if (!res.ok) throw new Error(data.error || 'Failed to dispatch email verification code');
 
       setOtpSent(true);
@@ -147,7 +157,17 @@ export const TenantLogin: React.FC<TenantLoginProps> = ({ tenant, role }) => {
         }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        const resText = await res.text();
+        try {
+          data = JSON.parse(resText);
+        } catch {
+          data = { error: resText || 'Server error. Please try again in a moment.' };
+        }
+      } catch {
+        data = { error: 'Unable to read server response.' };
+      }
       if (!res.ok) throw new Error(data.error || 'Invalid or expired verification code');
 
       // Exchange Firebase custom token

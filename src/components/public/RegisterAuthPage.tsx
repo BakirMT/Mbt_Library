@@ -37,7 +37,17 @@ export const RegisterAuthPage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       });
-      const emailData = await emailRes.json();
+      let emailData: any = {};
+      try {
+        const resText = await emailRes.text();
+        try {
+          emailData = JSON.parse(resText);
+        } catch {
+          emailData = { error: resText || 'Server error. Please try again in a moment.' };
+        }
+      } catch {
+        emailData = { error: 'Unable to read server response.' };
+      }
       if (!emailRes.ok) throw new Error(emailData.error || 'Failed to send verification email');
 
       // Store temporary registration state in sessionStorage
