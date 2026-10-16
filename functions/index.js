@@ -86,10 +86,13 @@ function sanitizeProviderError(raw, providerName) {
 }
 
 async function sendEmailJsOtpEmail(toEmail, otpCode) {
-  const serviceId = (process.env.EMAILJS_SERVICE_ID || '').trim() || 'service_wj02uv1';
-  const templateId = (process.env.EMAILJS_TEMPLATE_ID || '').trim();
-  const publicKey = (process.env.EMAILJS_PUBLIC_KEY || process.env.EMAILJS_USER_ID || '').trim();
-  const privateKey = (process.env.EMAILJS_PRIVATE_KEY || process.env.EMAILJS_ACCESS_TOKEN || '').trim();
+  let serviceId = (process.env.EMAILJS_SERVICE_ID || '').trim();
+  if (!serviceId || serviceId === 'service_wj') {
+    serviceId = 'service_wj02uv1';
+  }
+  const templateId = (process.env.EMAILJS_TEMPLATE_ID || '').trim() || 'template_ib3nk6l';
+  const publicKey = (process.env.EMAILJS_PUBLIC_KEY || process.env.EMAILJS_USER_ID || '').trim() || '8pnTJ9CanAtHrCa2u';
+  const privateKey = (process.env.EMAILJS_PRIVATE_KEY || process.env.EMAILJS_ACCESS_TOKEN || '').trim() || '_tlhOePLuvy0Tpj9e9YqM';
 
   if (!serviceId) {
     return {
