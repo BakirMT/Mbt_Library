@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db } from './src/db/index.ts';
+import { db } from './src/db/index';
 import {
   tenants,
   subscriptionPlans,
@@ -19,7 +19,7 @@ import {
   activityLogs,
   subscriptionEnquiries,
   otpVerifications,
-} from './src/db/schema.ts';
+} from './src/db/schema';
 import { eq, and, sql, desc, count } from 'drizzle-orm';
 import {
   verifyTenantActiveAndSubscribed,
@@ -29,7 +29,7 @@ import {
   checkServerStudentQuota,
   checkServerStorageQuota,
   checkServerBorrowingQuota,
-} from './src/middleware/subscriptionLimits.ts';
+} from './src/middleware/subscriptionLimits';
 import {
   INITIAL_PLANS,
   INITIAL_TENANTS,
@@ -39,11 +39,11 @@ import {
   INITIAL_BOOKS,
   INITIAL_COPIES,
   INITIAL_LOANS,
-} from './src/services/mockData.ts';
+} from './src/services/mockData';
 import crypto from 'crypto';
 import { Resend } from 'resend';
-import { adminAuth, adminDb } from './src/lib/firebase-admin.ts';
-import { requireAuth } from './src/middleware/auth.ts';
+import { adminAuth, adminDb } from './src/lib/firebase-admin';
+import { requireAuth } from './src/middleware/auth';
 
 dotenv.config({ override: true });
 

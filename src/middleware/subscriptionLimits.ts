@@ -1,5 +1,5 @@
-import { db } from '../db/index.ts';
-import { tenants, subscriptions, subscriptionPlans, books, bookCopies, tenantMemberships, loans } from '../db/schema.ts';
+import { db } from '../db/index';
+import { tenants, subscriptions, subscriptionPlans, books, bookCopies, tenantMemberships, loans } from '../db/schema';
 import { eq, and, sql, count } from 'drizzle-orm';
 
 export interface QuotaCheckResult {
